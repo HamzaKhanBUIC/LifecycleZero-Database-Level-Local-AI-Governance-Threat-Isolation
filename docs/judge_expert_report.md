@@ -16,7 +16,7 @@ LifecycleZero provides real-time local model telemetry monitoring, high-throughp
 
 ### The Shadow AI Offline Vulnerability
 A remote employee downloads a 70B parameter model locally and runs it completely offline. The employee feeds highly confidential files (e.g., `payroll.xlsx`, `acquisition_strategy.pdf`, or `proprietary_source_code`) into the local model.
-* **Why Traditional EDRs Fail:** Traditional EDRs focus on signatures and process behavior (e.g., registry modifications, system calls, network connections). They do not understand the semantic context that a process named `ollama-runner` is reading specific spreadsheets and extracting proprietary payroll records.
+* **Why Traditional EDRs Fail:** Traditional EDRs focus on signatures and process behavior (e.g., registry modifications, system calls, network connections). They do not understand the semantic context that a process named `ollama-runner` is reading specific spreadsheets and extracting proprietary payroll records. CrowdStrike Falcon cannot inspect the semantic file context of a local Ollama process because it operates at the kernel syscall layer, not the application context layer.
 * **The LifecycleZero Solution:** LifecycleZero's lightweight endpoint daemon audits local model context by tracking the process runtime, the associated open file descriptors, and CPU/NPU activity. This context is streamed back to the server for evaluation.
 
 ---

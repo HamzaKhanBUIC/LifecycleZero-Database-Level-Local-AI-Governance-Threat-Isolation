@@ -1,7 +1,7 @@
 # LifecycleZero: Database-Level Local AI Governance and Threat Isolation
 
 ## Inspiration
-As open-source Large Language Models (such as Ollama, Llama.cpp, and LM Studio) proliferate on corporate endpoints, security teams face a critical blind spot: Shadow AI. Employees are running powerful models locally to bypass corporate firewalls and upload limits. Traditional Endpoint Detection and Response (EDR) agents and network monitoring tools cannot detect when a local model reads sensitive files (such as payroll.xlsx or source code) offline. 
+As open-source Large Language Models (such as Ollama, Llama.cpp, and LM Studio) proliferate on corporate endpoints, security teams face a critical blind spot: Shadow AI. Employees are running powerful models locally to bypass corporate firewalls and upload limits. Traditional Endpoint Detection and Response (EDR) agents and network monitoring tools cannot detect when a local model reads sensitive files (such as payroll.xlsx or source code) offline. CrowdStrike Falcon cannot inspect the semantic file context of a local Ollama process because it operates at the kernel syscall layer, not the application context layer.
 
 LifecycleZero was built to bridge this gap, framing local AI safety as a high-throughput telemetry ingestion, database-level state, and automated gateway isolation problem.
 

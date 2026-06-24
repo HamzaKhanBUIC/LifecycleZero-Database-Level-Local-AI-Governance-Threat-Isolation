@@ -4,7 +4,7 @@ LifecycleZero is an enterprise-grade security platform that frames local AI gove
 
 ## The Framing: Why This Matters
 
-As local LLMs (like Ollama, Llama.cpp, and LM Studio) proliferate on corporate laptops, security teams face a massive blind spot. Employees are running open-source models locally to bypass corporate monitoring. Traditional endpoint protection (EDRs) and network firewalls are blind to this local context (e.g. which local model is reading which confidential file, and is it attempting network egress?).
+As local LLMs (like Ollama, Llama.cpp, and LM Studio) proliferate on corporate laptops, security teams face a massive blind spot. Employees are running open-source models locally to bypass corporate monitoring. Traditional endpoint protection (EDRs) and network firewalls are blind to this local context (e.g. which local model is reading which confidential file, and is it attempting network egress?). CrowdStrike Falcon cannot inspect the semantic file context of a local Ollama process because it operates at the kernel syscall layer, not the application context layer.
 
 LifecycleZero solves this by treating local AI safety as a high-throughput telemetry ingestion and database isolation problem:
 1. **Real-time Endpoint Telemetry Ingestion:** A lightweight endpoint daemon tracks local model activity (CPU, RAM, process names, files read, and network egress) and streams it to a secure gateway API.
