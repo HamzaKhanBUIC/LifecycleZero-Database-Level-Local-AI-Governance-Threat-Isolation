@@ -16,7 +16,7 @@ export default async function AssetsPage() {
           IT Hardware Fleet
         </h1>
         <p className="text-zinc-400 text-sm mt-1">
-          Monitor your organization's physical devices, track lifecycles, and perform administrative overrides.
+          Monitor your organization&apos;s physical devices, track lifecycles, and perform administrative overrides.
         </p>
       </div>
 

@@ -45,7 +45,7 @@ async function simulateTelemetryEvent(tenantId: string, assetId: string) {
     : BENIGN_PROCESSES[Math.floor(Math.random() * BENIGN_PROCESSES.length)];
     
   // If agentic, chance of accessing sensitive files
-  let filesAccessed: string[] = [];
+  const filesAccessed: string[] = [];
   if (isAgentic && Math.random() < 0.2) {
     filesAccessed.push(SENSITIVE_FILES[Math.floor(Math.random() * SENSITIVE_FILES.length)]);
   } else if (!isAgentic && Math.random() < 0.3) {
