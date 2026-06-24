@@ -10,7 +10,7 @@ LifecycleZero provides an end-to-end local AI governance platform:
 1. **Endpoint Telemetry Monitoring:** A lightweight system daemon monitors the execution of local AI model runtimes, tracking RAM/CPU utilization, process names, network egress, and specific files accessed.
 2. **High-Throughput Ingestion:** Telemetry is streamed to a secure Next.js API Gateway, immediately queued on AWS SQS (or a resilient fallback queue), returning a 202 Accepted response in under 20ms.
 3. **Autonomous Risk Analysis:** An asynchronous queue worker pulls messages and routes them through a multi-tier AI evaluation pipeline (AWS Bedrock Claude 3 Haiku primary, falling back to Google Gemini or Groq) to evaluate risk.
-4. **Database-Level Isolation:** If an agentic threat is identified, an administrator can execute a single-click transaction in the SOC dashboard. This uses a DynamoDB TransactWriteCommand to atomically isolate the asset and write an immutable audit log, immediately blocking further ingestion at the API gateway edge.
+4. **Database-Level Isolation:** If an agentic threat is identified, an administrator can execute a single-click transaction in the SOC dashboard. This uses a DynamoDB TransactWriteCommand to atomically isolate the asset and write an immutable audit log, immediately blocking further ingestion at the API gateway edge. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
 
 ## How We Built It
 * **Frontend:** Next.js (App Router) styled with a clinical, high-contrast brutalist design system.

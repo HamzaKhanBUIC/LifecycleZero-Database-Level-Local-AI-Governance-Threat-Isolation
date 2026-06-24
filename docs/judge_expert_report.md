@@ -47,7 +47,7 @@ When an administrator triggers a host isolation command, the system performs a `
 2. **Update:** Atomically updates the asset status from `ACTIVE` to `ISOLATED` on the asset record.
 3. **Put:** Inserts a new, immutable `AuditLog` record detailing the action, the administrator ID, and the timestamp.
 
-If either operation fails (e.g., database network drop, conditional check failure), the entire transaction rolls back, preventing partial or inconsistent states.
+If either operation fails (e.g., database network drop, conditional check failure), the entire transaction rolls back, preventing partial or inconsistent states. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
 
 ---
 
