@@ -190,6 +190,7 @@ export async function updateAssetStatusTransaction(params: {
           TableName: TABLE_NAME,
           Key: assetKey,
           UpdateExpression: updateExpressionStr,
+          ConditionExpression: "attribute_exists(PK) AND #status <> :newStatus",
           ExpressionAttributeNames: expressionNames,
           ExpressionAttributeValues: expressionValues
         }

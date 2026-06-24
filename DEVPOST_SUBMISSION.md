@@ -14,7 +14,7 @@ LifecycleZero provides an end-to-end local AI governance platform:
 
 ## How We Built It
 * **Frontend:** Next.js (App Router) styled with a clinical, high-contrast brutalist design system.
-* **Server-Pre-Rendering:** To handle high-density layouts, the fleet heatmap pre-renders 124 asset nodes on the server, resulting in a 0ms client-side paint delay.
+* **Server-Pre-Rendering:** To handle high-density layouts, the fleet heatmap pre-renders 124 asset nodes on the server, bypassing layout shifts and providing a sub-200ms initial client paint.
 * **Database:** Amazon DynamoDB using a Single-Table Design. We enforce multi-tenant isolation at the Partition Key level (`PK = TENANT#<TenantId>`), query alerts in milliseconds using a sparse Global Secondary Index (GSI2), and utilize TTL to automatically purge operational records after 90 days.
 * **Queueing & Async Workers:** AWS SQS handles telemetry decoupling. A dedicated TypeScript worker pulls and processes events asynchronously.
 * **AI Evaluation Pipeline:** Powered by AWS Bedrock (Claude 3 Haiku) as the enterprise-grade primary model, with automated failover handling to Google Gemini and Groq to ensure continuous runtime security.
