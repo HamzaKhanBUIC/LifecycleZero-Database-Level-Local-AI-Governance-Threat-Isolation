@@ -2,8 +2,10 @@ import { AgentTelemetry } from "./types";
 import { GoogleGenAI } from "@google/genai";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 
-// Bypass local corporate proxy TLS issues
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+// Bypass local corporate proxy TLS issues only in development
+if (process.env.NODE_ENV === "development") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 
 // Standard OpenAI SDK which Groq uses
 const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
