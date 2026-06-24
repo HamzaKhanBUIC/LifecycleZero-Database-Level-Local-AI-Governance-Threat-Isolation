@@ -40,4 +40,4 @@ LifecycleZero is distributed as a lightweight, read-only system daemon. It is pu
 Onboarding is completely frictionless. Once pushed by the MDM, the local daemon performs a secure handshake with the company's Next.js API Gateway using a pre-configured hardware enrollment token. This automatically registers the asset in the DynamoDB table and establishes the telemetry stream without manual IT intervention.
 
 ### Pricing Model
-LifecycleZero is sold as a standard B2B SaaS subscription billed at $5 per monitored endpoint per month. We offer an Enterprise tier that includes dedicated AWS Bedrock throughput, customizable risk heuristics, and long-term compliance audit logging.
+LifecycleZero is sold as a standard B2B SaaS subscription starting at $8 per monitored endpoint per month. We offer an Enterprise tier that includes dedicated AWS Bedrock throughput, customizable risk heuristics, and long-term compliance audit logging.

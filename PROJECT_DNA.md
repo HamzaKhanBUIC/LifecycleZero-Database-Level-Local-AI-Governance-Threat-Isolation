@@ -5,7 +5,7 @@
 
 ---
 
-## 🧬 Identity
+## Identity
 
 | Field | Value |
 |-------|-------|
@@ -19,13 +19,13 @@
 
 ---
 
-## 🎯 The One-Sentence Vision
+## The One-Sentence Vision
 
 > A B2B SaaS application that helps remote teams track, provision, and audit IT hardware across its complete lifecycle, natively leveraging Next.js on Vercel and DynamoDB for performance and compliance.
 
 ---
 
-## 🔧 Tech Stack Fingerprint
+## Tech Stack Fingerprint
 
 | Layer | Technology | Version | Why chosen |
 |-------|-----------|---------|------------|
@@ -40,7 +40,7 @@
 
 ---
 
-## 🏗️ Architectural Immutables
+## Architectural Immutables
 
 These decisions are LOCKED. The AI agent cannot reverse them without Lead Architect approval.
 Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
@@ -52,32 +52,32 @@ Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
 
 ---
 
-## 📦 Module Inventory
+## Module Inventory
 
 *Updated automatically by the AI after each new module is created.*
 
 | Module | Domain | Owner Subagent | Status |
 |--------|--------|----------------|--------|
-| `db` | DynamoDB Client & Types | API Engineer | ⏳ Not Started |
-| `auth` | Authentication & Tenant ID | API Engineer | ⏳ Not Started |
-| `assets` | Asset Management API | API Engineer | ⏳ Not Started |
-| `procurement` | Procurement Workflow API | API Engineer | ⏳ Not Started |
-| `ui` | Vercel v0 Components | UI/UX Designer | ⏳ Not Started |
+| `db` | DynamoDB Client & Types | API Engineer | Pending |
+| `auth` | Authentication & Tenant ID | API Engineer | Pending |
+| `assets` | Asset Management API | API Engineer | Pending |
+| `procurement` | Procurement Workflow API | API Engineer | Pending |
+| `ui` | Vercel v0 Components | UI/UX Designer | Pending |
 
 ---
 
-## 🔗 External Dependencies
+## External Dependencies
 
 *Every third-party service the project depends on.*
 
 | Service | Purpose | Env Var Key | Status |
 |---------|---------|-------------|--------|
-| AWS | DynamoDB Database | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | ⏳ Pending |
-| Vercel | Hosting & Deployment | N/A | ⏳ Pending |
+| AWS | DynamoDB Database | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Pending |
+| Vercel | Hosting & Deployment | N/A | Pending |
 
 ---
 
-## 🧠 Key Architectural Decisions Log
+## Key Architectural Decisions Log
 
 *Brief entries. Full ADRs live in `docs/ARCHITECTURE_DECISIONS/`.*
 
@@ -87,7 +87,7 @@ Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
 
 ---
 
-## ⚠️ Known Technical Debt
+## Known Technical Debt
 
 *Honest list of shortcuts taken. Required reading before Phase 5.*
 
@@ -97,7 +97,7 @@ Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
 
 ---
 
-## 🚨 The "Do Not Touch" List
+## The Do Not Touch List
 
 Files and patterns the AI must NEVER modify without explicit authorization:
 

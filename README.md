@@ -62,7 +62,7 @@ AWS Database Architects and Solution Architects will appreciate the implementati
 
 * **Deployment Model:** LifecycleZero deploys as a lightweight, read-only system daemon pushed silently to macOS, Windows, and Linux endpoints via Mobile Device Management (MDM) tools (e.g., Jamf, Microsoft Intune, Kandji). No end-user interaction or local installation prompts are required.
 * **Onboarding Friction:** Zero. Once the MDM pushes the daemon, it automatically completes a secure handshake with the tenant's API gateway using a pre-configured hardware enrollment token, auto-provisioning its record in DynamoDB.
-* **Pricing Model:** Standard B2B SaaS subscription billed at $5 per monitored endpoint per month. An Enterprise tier offers dedicated AWS Bedrock endpoints, custom security heuristic rules, and historical CSV audit logging.
+* **Pricing Model:** Standard B2B SaaS subscription starting at $8 per monitored endpoint per month. An Enterprise tier offers dedicated AWS Bedrock endpoints, custom security heuristic rules, and historical CSV audit logging.
 
 ---
 

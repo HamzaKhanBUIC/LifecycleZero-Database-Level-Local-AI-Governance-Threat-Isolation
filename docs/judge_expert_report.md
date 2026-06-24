@@ -107,7 +107,7 @@ Risk evaluation runs asynchronously on the queue worker using a multi-layered pr
 * **Frictionless Onboarding:** Upon installation, the daemon uses a secure enrollment token to complete a secure handshake with the tenant API gateway, automatically provisioning the hardware asset record in DynamoDB.
 
 ### Pricing Model
-* **SaaS Subscription:** Billed at $5 per monitored endpoint per month.
+* **SaaS Subscription:** Billed starting at $8 per monitored endpoint per month.
 * **Enterprise Tier:** Dedicated Bedrock endpoints, customizable AI heuristics, 1-year historical compliance audit logs, and instant CSV/PDF export.
 
 ---
