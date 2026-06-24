@@ -1,0 +1,48 @@
+{
+  "name": "it-asset-management",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env DB_LOCAL=true next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:local": "docker run -p 8000:8000 amazon/dynamodb-local",
+    "db:provision-local": "cross-env DB_LOCAL=true tsx scripts/provision-db.ts",
+    "db:reset-local": "cross-env DB_LOCAL=true tsx scripts/provision-db.ts --reset",
+    "db:seed-local": "cross-env DB_LOCAL=true tsx scripts/seed-db.ts",
+    "test:integration": "cross-env DB_LOCAL=true tsx scripts/test-integration.ts",
+    "db:simulate": "cross-env DB_LOCAL=true tsx scripts/simulate-telemetry.ts",
+    "agent": "cross-env DB_LOCAL=true tsx scripts/lifecycle-agent.ts",
+    "worker": "cross-env DB_LOCAL=true tsx scripts/telemetry-worker.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1075.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-sqs": "^3.1075.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "@clerk/nextjs": "^6.0.0",
+    "@google/genai": "^2.10.0",
+    "dotenv": "^17.4.2",
+    "lucide-react": "^1.21.0",
+    "next": "16.2.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.9.0",
+    "swr": "^2.4.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "cross-env": "^7.0.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4",
+    "typescript": "^5"
+  }
+}
