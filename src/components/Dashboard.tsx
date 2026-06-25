@@ -2,13 +2,18 @@
 
 import { useState, useEffect } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset } from "../app/actions/telemetry";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets } from "../app/actions/telemetry";
 import { simulateSilentHost } from "../app/actions/simulate";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, Lock, CheckSquare, TerminalSquare, Clock, Bot, User, Download } from "lucide-react";
 // Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const TENANT_ID = "org_demo_123";
+const TENANTS = [
+  { id: "org_demo_123",      name: "Acme Corp (Demo)" },
+  { id: "org_fintech_456",  name: "FinTech Inc" },
+  { id: "org_healthco_789", name: "HealthCo Ltd" },
+];
+const DEFAULT_TENANT_ID = "org_demo_123";
 
 const generateChartData = (alerts: any[]) => {
   const chartData = [];
@@ -36,8 +41,8 @@ const generateChartData = (alerts: any[]) => {
 
 const fetchDashboardData = async () => {
   const [fetchedAssets, fetchedAlerts] = await Promise.all([
-    getAssets(TENANT_ID),
-    getCrossAssetAlerts(TENANT_ID)
+    getAssets(DEFAULT_TENANT_ID),
+    getCrossAssetAlerts(DEFAULT_TENANT_ID)
   ]);
   const sortedAlerts = fetchedAlerts.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
   const chartData = generateChartData(sortedAlerts);
@@ -60,7 +65,7 @@ const SCENARIOS = {
   scenario1: {
     name: "llama.cpp Accessing auth_tokens.json (Critical)",
     payload: {
-      tenantId: TENANT_ID,
+      tenantId: DEFAULT_TENANT_ID,
       assetId: "AST-M3PRO-001",
       processName: "llama.cpp",
       filesAccessed: ["auth_tokens.json"],
@@ -72,7 +77,7 @@ const SCENARIOS = {
   scenario2: {
     name: "ollama Accessing payroll_2026.xlsx (Critical)",
     payload: {
-      tenantId: TENANT_ID,
+      tenantId: DEFAULT_TENANT_ID,
       assetId: "AST-M3AIR-003",
       processName: "ollama",
       filesAccessed: ["payroll_2026.xlsx"],
@@ -84,7 +89,7 @@ const SCENARIOS = {
   scenario3: {
     name: "cursor.exe Accessing index.css (Clean)",
     payload: {
-      tenantId: TENANT_ID,
+      tenantId: DEFAULT_TENANT_ID,
       assetId: "AST-M3PRO-001",
       processName: "cursor.exe",
       filesAccessed: ["index.css"],
@@ -96,7 +101,7 @@ const SCENARIOS = {
   scenario4: {
     name: "Simulate Agent Going Silent (Heartbeat Timeout)",
     payload: {
-      tenantId: TENANT_ID,
+      tenantId: DEFAULT_TENANT_ID,
       assetId: "AST-MAC-004",
       processName: "HEARTBEAT_TIMEOUT",
       filesAccessed: [],
@@ -109,6 +114,7 @@ const SCENARIOS = {
 
 export default function Dashboard({ initialAssets, initialAlerts }: DashboardProps) {
   console.log("--- DASHBOARD MOUNTED ---", initialAssets?.length, initialAlerts?.length);
+  const [activeTenantId, setActiveTenantId] = useState(DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
   const { data, isLoading } = useSWR('dashboardData', fetchDashboardData, { 
@@ -120,6 +126,10 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
     }
   });
   const [isolatingId, setIsolatingId] = useState<string | null>(null);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [bulkIsolating, setBulkIsolating] = useState(false);
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
   
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -153,7 +163,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         `[ACTION] Setting LastHeartbeat to 10 minutes ago in DB...`
       ]);
       try {
-        const res = await simulateSilentHost(TENANT_ID, scenario.payload.assetId);
+        const res = await simulateSilentHost(activeTenantId, scenario.payload.assetId);
         if (res.success) {
           setSimulationLog(prev => [
             ...prev,
@@ -231,7 +241,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         assets: assets.map((a: any) => a.AssetId === assetId ? { ...a, Status: "ISOLATED" } : a)
       }, false);
       
-      const res = await isolateAsset(TENANT_ID, assetId);
+      const res = await isolateAsset(activeTenantId, assetId);
       if (res && !res.success) {
         setError(res.error || "Failed to isolate host.");
         // Rollback optimistic update
@@ -248,6 +258,26 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
     }
   };
 
+  const handleBulkIsolate = async () => {
+    if (selectedAssetIds.size === 0) return;
+    setBulkIsolating(true);
+    setBulkResult(null);
+    try {
+      const ids = Array.from(selectedAssetIds);
+      const result = await bulkIsolateAssets(activeTenantId, ids);
+      setBulkResult(
+        `BULK_ISOLATION COMPLETE — Succeeded: ${result.succeeded.length}, Already isolated: ${result.alreadyIsolated.length}, Failed: ${result.failed.length}`
+      );
+      setSelectedAssetIds(new Set());
+      setSelectionMode(false);
+      mutate('dashboardData');
+    } catch (err: any) {
+      setBulkResult(`BULK_ISOLATION FAILED — ${err.message}`);
+    } finally {
+      setBulkIsolating(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#09090b] text-gray-300 font-sans selection:bg-blue-900">
       
@@ -258,6 +288,22 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             <TerminalSquare className="w-5 h-5 text-blue-500" />
             <span className="font-mono font-bold text-sm text-gray-100 tracking-tight">LIFECYCLE_ZERO</span>
             <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono uppercase tracking-widest ml-2">Enterprise</span>
+            {/* Multi-tenant switcher */}
+            <select
+              value={activeTenantId}
+              onChange={(e) => {
+                setActiveTenantId(e.target.value);
+                setSelectedAssetIds(new Set());
+                setSelectionMode(false);
+                mutate('dashboardData');
+              }}
+              className="ml-4 bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px] px-2 py-1 focus:outline-none focus:border-blue-700 cursor-pointer"
+              title="Switch tenant workspace"
+            >
+              {TENANTS.map(t => (
+                <option key={t.id} value={t.id} className="bg-zinc-900 font-mono">{t.name}</option>
+              ))}
+            </select>
           </div>
           <div className="flex items-center gap-4">
             <a 
@@ -456,13 +502,39 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
           <div className="lg:col-span-1 flex flex-col gap-4">
             
             {/* Heatmap Card */}
-            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[250px]">
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[250px] relative">
               <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                   <Server className="w-4 h-4" />
                   Fleet Heatmap
+                  {selectionMode && selectedAssetIds.size > 0 && (
+                    <span className="ml-2 px-1.5 py-0.5 bg-red-950/30 border border-red-900/50 text-red-400 text-[9px] font-bold">
+                      {selectedAssetIds.size} SELECTED
+                    </span>
+                  )}
                 </h2>
-                <span className="text-[10px] font-mono text-zinc-500">TOTAL: {assets.length}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-zinc-500">TOTAL: {assets.length}</span>
+                  <button
+                    onClick={() => { setSelectionMode(m => !m); setSelectedAssetIds(new Set()); }}
+                    className={`font-mono text-[9px] px-2 py-0.5 border transition-colors ${
+                      selectionMode
+                        ? 'border-blue-700 text-blue-400 bg-blue-950/20'
+                        : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                    }`}
+                  >
+                    {selectionMode ? 'CANCEL' : 'SELECT'}
+                  </button>
+                  {selectionMode && selectedAssetIds.size > 0 && (
+                    <button
+                      onClick={handleBulkIsolate}
+                      disabled={bulkIsolating}
+                      className="font-mono text-[9px] px-2 py-0.5 border border-red-800 text-red-400 bg-red-950/20 hover:bg-red-800 hover:text-white transition-colors disabled:opacity-50"
+                    >
+                      {bulkIsolating ? 'ISOLATING...' : `ISOLATE ${selectedAssetIds.size}`}
+                    </button>
+                  )}
+                </div>
               </div>
               
               <div className="p-3 overflow-y-auto custom-scrollbar flex-1">
@@ -481,12 +553,27 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                       ? `${Math.floor((Date.now() - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
                       : "Never";
 
+                    const isSelected = selectedAssetIds.has(asset.AssetId);
+
                     return (
                       <button 
-                        key={idx} 
-                        onClick={() => setSelectedAsset(asset)}
+                        key={idx}
+                        onClick={() => {
+                          if (selectionMode) {
+                            setSelectedAssetIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(asset.AssetId)) next.delete(asset.AssetId);
+                              else next.add(asset.AssetId);
+                              return next;
+                            });
+                          } else {
+                            setSelectedAsset(asset);
+                          }
+                        }}
                         title={`${asset.AssetId} - ${isIsolated ? 'ISOLATED' : isSilent ? `UNREACHABLE (Silent ${lastSeenText})` : hasCriticalAlert ? 'CRITICAL' : 'CLEAN'}`}
-                        className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] cursor-crosshair transition-colors focus:outline-none focus:ring-1 focus:ring-zinc-400`}
+                        className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] transition-colors focus:outline-none ${
+                          isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950' : 'cursor-crosshair focus:ring-1 focus:ring-zinc-400'
+                        }`}
                       />
                     );
                   })}
