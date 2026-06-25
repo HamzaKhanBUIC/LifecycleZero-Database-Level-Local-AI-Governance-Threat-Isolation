@@ -130,3 +130,85 @@ export async function isolateAsset(tenantId: string, assetId: string) {
     };
   }
 }
+
+/**
+ * Bulk-isolate multiple assets in parallel.
+ * Runs N concurrent DynamoDB TransactWrite operations, one per asset.
+ * Returns a per-asset result summary so the UI can show which succeeded.
+ *
+ * This is the "select 5 devices, isolate all" enterprise capability — it
+ * demonstrates that our isolation plane is fully programmatic, not manual.
+ */
+export async function bulkIsolateAssets(
+  tenantId: string,
+  assetIds: string[]
+): Promise<{
+  totalRequested: number;
+  succeeded: string[];
+  failed: Array<{ assetId: string; reason: string }>;
+  alreadyIsolated: string[];
+}> {
+  if (!assetIds || assetIds.length === 0) {
+    return { totalRequested: 0, succeeded: [], failed: [], alreadyIsolated: [] };
+  }
+
+  let activeTenantId = tenantId;
+  let actorId = "ADMIN_123";
+  let actorName = "Security Administrator";
+  try {
+    const context = await getTenantContext();
+    if (context.tenantId) {
+      activeTenantId = context.tenantId;
+      actorId = context.userId || actorId;
+    }
+  } catch (e) {
+    console.warn("[bulkIsolateAssets] Fallback to client tenantId:", tenantId);
+  }
+
+  const results = await Promise.allSettled(
+    assetIds.map(async (assetId) => {
+      const asset = await getAssetById(activeTenantId, assetId);
+      if (!asset) throw new Error("NOT_FOUND");
+      if (asset.Status === "ISOLATED") throw new Error("ALREADY_ISOLATED");
+
+      await updateAssetStatusTransaction({
+        tenantId: activeTenantId,
+        assetId,
+        newStatus: "ISOLATED",
+        assignedEmployeeId: asset.EmployeeId,
+        assignedEmployeeName: asset.EmployeeName,
+        actorId,
+        actorName,
+        action: "BULK_EMERGENCY_ISOLATION",
+        details: `Asset isolated as part of a bulk containment operation against ${assetIds.length} devices.`
+      });
+
+      return assetId;
+    })
+  );
+
+  const succeeded: string[] = [];
+  const failed: Array<{ assetId: string; reason: string }> = [];
+  const alreadyIsolated: string[] = [];
+
+  results.forEach((result, idx) => {
+    const assetId = assetIds[idx];
+    if (result.status === "fulfilled") {
+      succeeded.push(assetId);
+    } else {
+      const reason = (result as PromiseRejectedResult).reason?.message || "Unknown error";
+      if (reason === "ALREADY_ISOLATED") {
+        alreadyIsolated.push(assetId);
+      } else {
+        failed.push({ assetId, reason });
+      }
+    }
+  });
+
+  console.log(
+    `[bulkIsolateAssets] Requested: ${assetIds.length}, Succeeded: ${succeeded.length}, ` +
+    `Already isolated: ${alreadyIsolated.length}, Failed: ${failed.length}`
+  );
+
+  return { totalRequested: assetIds.length, succeeded, failed, alreadyIsolated };
+}
