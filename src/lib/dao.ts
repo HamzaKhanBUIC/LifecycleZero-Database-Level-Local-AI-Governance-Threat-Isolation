@@ -5,12 +5,15 @@ import {
   QueryCommand, 
   PutCommand, 
   TransactWriteCommand,
-  GetCommand
+  GetCommand,
+  UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 import { docClient } from "./dynamodb";
 import type { Tenant, Employee, HardwareAsset, ProcurementRequest, AuditLog } from "./types.ts";
 
-const TABLE_NAME = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
+import { env } from "./env";
+
+const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
 // Helper to check if a status requires administrative action (e.g. provisioning, shipping, wiping)
 function statusRequiresAction(status: string): boolean {
@@ -240,6 +243,21 @@ export async function getAssetById(tenantId: string, assetId: string): Promise<H
 
   const response = await docClient.send(command);
   return response.Item as HardwareAsset | undefined;
+}
+
+/**
+ * Updates the last seen heartbeat timestamp of a hardware asset
+ */
+export async function updateAssetHeartbeat(tenantId: string, assetId: string): Promise<void> {
+  const timestamp = new Date().toISOString();
+  await docClient.send(new UpdateCommand({
+    TableName: TABLE_NAME,
+    Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+    UpdateExpression: "SET LastHeartbeat = :ts",
+    ExpressionAttributeValues: {
+      ":ts": timestamp
+    }
+  }));
 }
 
 /**

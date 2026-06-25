@@ -34,6 +34,7 @@ export interface HardwareAsset {
   GSI1SK: string; // STATE#<Status>
   GSI2PK?: string; // TENANT#<TenantID>#ACTION_REQ (if applicable)
   GSI2SK?: string; // DATE#<Timestamp>
+  LastHeartbeat?: string;
   UpdatedAt: string;
 }
 
