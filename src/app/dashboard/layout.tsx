@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
-import { OrganizationSwitcher, UserButton } from "@clerk/nextjs";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { userId, orgId } = await auth();
+  const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
+  let userId: string | null = "user_mock_admin";
+  let orgId: string | null = "org_demo_123";
+
+  // Only call Clerk auth when Clerk is active and a valid key exists
+  if (!skipClerk && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith("pk_")) {
+    const { auth } = await import("@clerk/nextjs/server");
+    const authResult = await auth();
+    userId = authResult.userId || null;
+    orgId = authResult.orgId || null;
+  }
 
   if (!userId) {
     redirect("/");
@@ -27,19 +35,13 @@ export default async function DashboardLayout({
           </span>
         </div>
 
-        {/* Clerk Org Switcher */}
+        {/* Org Display */}
         <div className="mb-6 pb-6 border-b border-zinc-900">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
-          <OrganizationSwitcher 
-            appearance={{
-              elements: {
-                rootBox: "w-full",
-                organizationSwitcherTrigger: "w-full justify-between bg-zinc-900 border border-zinc-800 text-zinc-100 hover:bg-zinc-800 px-3 py-2 rounded-lg font-medium",
-                organizationPreviewTextContainer: "text-zinc-100",
-                organizationSwitcherTriggerIcon: "text-zinc-400"
-              }
-            }}
-          />
+          <div className="w-full bg-zinc-900 border border-zinc-800 text-zinc-300 px-3 py-2 rounded-lg font-mono text-xs flex justify-between items-center select-none">
+            <span>Demo Org (org_demo_123)</span>
+            <span className="text-[10px] text-zinc-500 font-semibold">[LIVE]</span>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -63,12 +65,22 @@ export default async function DashboardLayout({
           >
             🛒 Procurement Queue
           </Link>
+          <div className="pt-4 mt-4 border-t border-zinc-900/60">
+            <Link
+              href="/"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/20 transition border border-dashed border-red-900/30"
+            >
+              🛡️ AI Threat Console
+            </Link>
+          </div>
         </nav>
 
         {/* User profile section */}
         <div className="pt-6 border-t border-zinc-900 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <UserButton afterSignOutUrl="/" />
+            <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-mono text-zinc-400 select-none">
+              ADM
+            </div>
             <div className="text-left">
               <p className="text-xs font-semibold text-zinc-200">Management Panel</p>
               <p className="text-[10px] text-zinc-500">B2B Admin Role</p>
@@ -79,35 +91,9 @@ export default async function DashboardLayout({
 
       {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {!orgId ? (
-          // UX Gate if they haven't selected or created an organization
-          <main className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-zinc-950">
-            <div className="max-w-md p-8 rounded-2xl border border-zinc-900 bg-zinc-950/40 backdrop-blur relative">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-xl">
-                🏢
-              </div>
-              <h2 className="text-xl font-bold text-white mt-4">Select an Organization</h2>
-              <p className="text-sm text-zinc-400 mt-2 mb-6 leading-relaxed">
-                LifecycleZero manages physical assets scoped strictly to organizations. Please select or create an organization to proceed.
-              </p>
-              <OrganizationSwitcher 
-                hidePersonal={true}
-                appearance={{
-                  elements: {
-                    rootBox: "w-full",
-                    organizationSwitcherTrigger: "w-full justify-between bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl font-semibold shadow-lg shadow-indigo-500/20",
-                    organizationPreviewTextContainer: "text-white",
-                    organizationSwitcherTriggerIcon: "text-white"
-                  }
-                }}
-              />
-            </div>
-          </main>
-        ) : (
-          <main className="flex-1 overflow-y-auto bg-zinc-950/20 relative z-10">
-            {children}
-          </main>
-        )}
+        <main className="flex-1 overflow-y-auto bg-zinc-950/20 relative z-10">
+          {children}
+        </main>
       </div>
     </div>
   );
