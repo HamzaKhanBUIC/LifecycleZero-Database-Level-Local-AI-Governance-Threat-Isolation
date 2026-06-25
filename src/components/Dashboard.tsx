@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR, { mutate } from "swr";
 import { getAssets, getCrossAssetAlerts, isolateAsset } from "../app/actions/telemetry";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, Lock, CheckSquare, TerminalSquare, Clock, Bot, User, Download } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const TENANT_ID = "org_demo_123";
@@ -126,7 +126,14 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
               <span className="font-mono text-xs text-green-500">SYS_ONLINE</span>
             </div>
             <div className="w-px h-4 bg-zinc-800 mx-2" />
-            <UserButton appearance={{ elements: { userButtonAvatarBox: "w-6 h-6 rounded-sm" } }} />
+            <SignedIn>
+              <UserButton appearance={{ elements: { userButtonAvatarBox: "w-6 h-6 rounded-sm" } }} />
+            </SignedIn>
+            <SignedOut>
+              <div className="w-6 h-6 rounded-sm bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-mono text-zinc-400 select-none">
+                ADM
+              </div>
+            </SignedOut>
           </div>
         </div>
       </nav>

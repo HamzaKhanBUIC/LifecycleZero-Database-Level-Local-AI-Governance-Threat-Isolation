@@ -1,4 +1,3 @@
-import { SignedIn, SignedOut, SignIn } from "@clerk/nextjs";
 import Dashboard from "../components/Dashboard";
 import { getAssets, getCrossAssetAlerts } from "./actions/telemetry";
 
@@ -21,14 +20,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-[#09090b]">
-      <SignedOut>
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-black grid-bg">
-          <SignIn routing="hash" />
-        </div>
-      </SignedOut>
-      <SignedIn>
-        <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} />
-      </SignedIn>
+      <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} />
     </main>
   );
 }
