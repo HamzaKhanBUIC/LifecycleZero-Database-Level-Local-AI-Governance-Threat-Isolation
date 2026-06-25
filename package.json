@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cross-env DB_LOCAL=true next dev",
+    "dev": "cross-env DB_LOCAL=true NEXT_PUBLIC_SKIP_CLERK=true next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -15,7 +15,12 @@
     "test:integration": "cross-env DB_LOCAL=true tsx scripts/test-integration.ts",
     "db:simulate": "cross-env DB_LOCAL=true tsx scripts/simulate-telemetry.ts",
     "agent": "cross-env DB_LOCAL=true tsx scripts/lifecycle-agent.ts",
-    "worker": "cross-env DB_LOCAL=true tsx scripts/telemetry-worker.ts"
+    "worker": "cross-env DB_LOCAL=true tsx scripts/telemetry-worker.ts",
+    "prod:provision-db": "cross-env DB_LOCAL=false tsx scripts/provision-db.ts",
+    "prod:provision-sqs": "cross-env DB_LOCAL=false tsx scripts/provision-sqs.ts",
+    "prod:seed": "cross-env DB_LOCAL=false tsx scripts/seed-db.ts",
+    "prod:worker": "cross-env DB_LOCAL=false tsx scripts/telemetry-worker.ts",
+    "prod:test": "cross-env DB_LOCAL=false tsx scripts/test-integration.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1075.0",
