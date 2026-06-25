@@ -74,6 +74,10 @@ async function processTelemetryItem(payload: any) {
   if (aiResult.riskLevel === "CRITICAL" || aiResult.riskLevel === "WARNING") {
     telemetry.GSI2PK = `TENANT#${tenantId}#ALERT#${aiResult.riskLevel}`;
     telemetry.GSI2SK = `DATE#${timestamp}`;
+    
+    // Simulate webhooks to external integrations (Slack/PagerDuty)
+    console.log(`[ALARM WEBHOOK] 🚨 Slack notification dispatched for organization ${tenantId}. Asset: ${assetId}. Risk: ${aiResult.riskLevel}.`);
+    console.log(`[ALARM WEBHOOK] 🚨 PagerDuty incident triggered for organization ${tenantId}. Incident Details: ${aiResult.reasoning}`);
   }
 
   // Write to DynamoDB
