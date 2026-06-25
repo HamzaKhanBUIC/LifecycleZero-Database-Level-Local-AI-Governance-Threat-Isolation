@@ -2,9 +2,22 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/lib/auth';
-import { currentUser } from '@clerk/nextjs/server';
 import { submitProcurementRequest, resolveProcurementRequest } from '@/lib/dao';
 import { ProcurementRequest } from '@/lib/types';
+
+// Only load Clerk currentUser when explicitly enabled with a valid key
+async function getActorName(userId: string | null | undefined): Promise<string> {
+  const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  if (
+    process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" &&
+    pubKey?.startsWith("pk_")
+  ) {
+    const { currentUser } = await import('@clerk/nextjs/server');
+    const user = await currentUser();
+    if (user) return `${user.firstName} ${user.lastName}`;
+  }
+  return "Demo Administrator";
+}
 
 export async function createRequestAction(data: {
   assetName: string;
@@ -13,9 +26,7 @@ export async function createRequestAction(data: {
 }) {
   try {
     const { tenantId, userId } = await getTenantContext();
-    const user = await currentUser();
-    const userName = user ? `${user.firstName} ${user.lastName}` : userId || "Unknown User";
-
+    const userName = await getActorName(userId);
     const requestId = `REQ-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
     await submitProcurementRequest(tenantId, {
@@ -39,8 +50,7 @@ export async function createRequestAction(data: {
 export async function resolveRequestAction(requestId: string, decision: 'APPROVED' | 'REJECTED') {
   try {
     const { tenantId, userId } = await getTenantContext();
-    const user = await currentUser();
-    const userName = user ? `${user.firstName} ${user.lastName}` : userId || "System Admin";
+    const userName = await getActorName(userId);
 
     const result = await resolveProcurementRequest(
       tenantId,

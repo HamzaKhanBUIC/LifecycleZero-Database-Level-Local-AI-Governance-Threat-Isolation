@@ -2,7 +2,6 @@
 
 import { revalidatePath } from 'next/cache';
 import { getTenantContext } from '@/lib/auth';
-import { currentUser } from '@clerk/nextjs/server';
 import { updateAssetStatusTransaction } from '@/lib/dao';
 import { HardwareAsset } from '@/lib/types';
 
@@ -16,8 +15,20 @@ export async function updateAssetStatusAction(params: {
 }) {
   try {
     const { tenantId, userId } = await getTenantContext();
-    const user = await currentUser();
-    const userName = user ? `${user.firstName} ${user.lastName}` : userId || "System Admin";
+    let userName = "Demo Administrator";
+
+    // Only load Clerk currentUser when explicitly enabled with a valid key
+    const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    if (
+      process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" &&
+      pubKey?.startsWith("pk_")
+    ) {
+      const { currentUser } = await import('@clerk/nextjs/server');
+      const user = await currentUser();
+      if (user) {
+        userName = `${user.firstName} ${user.lastName}`;
+      }
+    }
 
     await updateAssetStatusTransaction({
       tenantId,
