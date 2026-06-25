@@ -48,6 +48,45 @@ interface DashboardProps {
   initialAlerts: any[];
 }
 
+const SCENARIOS = {
+  scenario1: {
+    name: "llama.cpp Accessing auth_tokens.json (Critical)",
+    payload: {
+      tenantId: TENANT_ID,
+      assetId: "AST-M3PRO-001",
+      processName: "llama.cpp",
+      filesAccessed: ["auth_tokens.json"],
+      cpuUsage: 85,
+      ramUsage: 12,
+      networkEgress: 500
+    }
+  },
+  scenario2: {
+    name: "ollama Accessing payroll_2026.xlsx (Critical)",
+    payload: {
+      tenantId: TENANT_ID,
+      assetId: "AST-M3AIR-003",
+      processName: "ollama",
+      filesAccessed: ["payroll_2026.xlsx"],
+      cpuUsage: 72,
+      ramUsage: 16,
+      networkEgress: 328
+    }
+  },
+  scenario3: {
+    name: "cursor.exe Accessing index.css (Clean)",
+    payload: {
+      tenantId: TENANT_ID,
+      assetId: "AST-M3PRO-001",
+      processName: "cursor.exe",
+      filesAccessed: ["index.css"],
+      cpuUsage: 5,
+      ramUsage: 2,
+      networkEgress: 1
+    }
+  }
+};
+
 export default function Dashboard({ initialAssets, initialAlerts }: DashboardProps) {
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
@@ -62,9 +101,55 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [isolatingId, setIsolatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [selectedScenario, setSelectedScenario] = useState<keyof typeof SCENARIOS>("scenario1");
+  const [simulating, setSimulating] = useState(false);
+  const [simulationLog, setSimulationLog] = useState<string[]>([
+    "System ready. Select a scenario to inject threat telemetry."
+  ]);
+
   const assets = data?.assets || [];
   const alerts = data?.alerts || [];
   const chartData = data?.chartData || [];
+
+  const handleInjectTelemetry = async () => {
+    setSimulating(true);
+    const scenario = SCENARIOS[selectedScenario];
+    setSimulationLog(prev => [
+      ...prev,
+      `[SIMULATION] Injecting telemetry for ${scenario.payload.assetId}...`,
+      `[POST /api/ingest] Payload: ${JSON.stringify(scenario.payload)}`
+    ]);
+
+    try {
+      const res = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(scenario.payload)
+      });
+      
+      const resData = await res.json();
+      if (res.ok) {
+        setSimulationLog(prev => [
+          ...prev,
+          `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
+          `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
+        ]);
+        mutate('dashboardData');
+      } else {
+        setSimulationLog(prev => [
+          ...prev,
+          `[RESPONSE ${res.status}] FAILED: ${resData.error || "Unknown error"} - ${resData.message || ""}`
+        ]);
+      }
+    } catch (err: any) {
+      setSimulationLog(prev => [
+        ...prev,
+        `[ERROR] Injection failed: ${err.message || err}`
+      ]);
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const handleIsolate = async (assetId: string) => {
     setIsolatingId(assetId);
@@ -296,10 +381,12 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             </div>
           </div>
 
-          {/* Sidebar: Fleet Heatmap */}
-          <div className="lg:col-span-1">
-            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[600px]">
-              <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+          {/* Sidebar: Fleet Heatmap & Simulation Console */}
+          <div className="lg:col-span-1 flex flex-col gap-4">
+            
+            {/* Heatmap Card */}
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[250px]">
+              <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                   <Server className="w-4 h-4" />
                   Fleet Heatmap
@@ -307,7 +394,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                 <span className="text-[10px] font-mono text-zinc-500">TOTAL: {assets.length}</span>
               </div>
               
-              <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+              <div className="p-3 overflow-y-auto custom-scrollbar flex-1">
                 <div className="flex flex-wrap gap-[3px]">
                  {assets.map((asset: any, idx: number) => {
                    const hasCriticalAlert = alerts.some((a: any) => a.AssetId === asset.AssetId && a.RiskLevel === 'CRITICAL');
@@ -321,18 +408,68 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                      <div 
                        key={idx} 
                        title={`${asset.AssetId} - ${isIsolated ? 'ISOLATED' : hasCriticalAlert ? 'CRITICAL' : 'CLEAN'}`}
-                       className={`w-[14px] h-[14px] ${bgColor} rounded-[2px] cursor-crosshair transition-colors`}
+                       className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] cursor-crosshair transition-colors`}
                      />
                    );
                  })}
                 </div>
-                <div className="mt-6 flex flex-col gap-2 border-t border-zinc-800 pt-4">
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-green-500/80 rounded-[2px]"></div> CLEAN / ACTIVE</div>
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-red-500 rounded-[2px]"></div> CRITICAL RISK</div>
-                  <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-zinc-700 rounded-[2px]"></div> ISOLATED / OFFLINE</div>
+                <div className="mt-3 flex flex-col gap-1.5 border-t border-zinc-800 pt-2.5">
+                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-green-500/80 rounded-[2px]"></div> CLEAN / ACTIVE</div>
+                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-red-500 rounded-[2px]"></div> CRITICAL RISK</div>
+                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-zinc-700 rounded-[2px]"></div> ISOLATED / OFFLINE</div>
                 </div>
               </div>
             </div>
+
+            {/* Simulation Console Card */}
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[336px]">
+              <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-blue-500" />
+                  Threat Simulation Sandbox
+                </h2>
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-none animate-ping" />
+              </div>
+              
+              <div className="p-3 flex flex-col flex-1 gap-2.5 justify-between">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select Threat Vector</label>
+                  <select 
+                    value={selectedScenario}
+                    onChange={(e) => setSelectedScenario(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
+                  >
+                    {Object.entries(SCENARIOS).map(([key, val]) => (
+                      <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
+                        {val.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Simulation Output Console */}
+                <div className="flex-1 bg-zinc-950 border border-zinc-900 p-2 font-mono text-[9px] text-zinc-400 overflow-y-auto custom-scrollbar flex flex-col gap-1 max-h-[140px] select-text">
+                  {simulationLog.map((logLine, idx) => (
+                    <div key={idx} className={logLine.includes("SUCCESS") ? "text-green-500" : logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-500" : logLine.includes("SIMULATION") ? "text-blue-400" : "text-zinc-500"}>
+                      &gt; {logLine}
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={handleInjectTelemetry}
+                  disabled={simulating}
+                  className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold ${
+                    simulating 
+                      ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' 
+                      : 'bg-blue-950/40 border-blue-900 text-blue-400 hover:bg-blue-900 hover:text-white cursor-pointer'
+                  }`}
+                >
+                  {simulating ? "INJECTING TELEMETRY..." : "RUN THREAT SIMULATION"}
+                </button>
+              </div>
+            </div>
+
           </div>
 
         </div>

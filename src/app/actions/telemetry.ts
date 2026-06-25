@@ -1,17 +1,9 @@
 "use server";
 
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { getAssetById, updateAssetStatusTransaction } from "../../lib/dao";
+import { docClient } from "../../lib/dynamodb";
 
-const isLocal = process.env.DB_LOCAL === "true";
-const client = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  endpoint: isLocal ? "http://localhost:8000" : undefined,
-  credentials: isLocal ? { accessKeyId: "local", secretAccessKey: "local" } : undefined
-});
-
-const docClient = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
 
 /**

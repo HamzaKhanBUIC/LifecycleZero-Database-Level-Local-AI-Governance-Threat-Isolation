@@ -78,37 +78,33 @@ export async function getAuditTrailForAsset(tenantId: string, assetId: string): 
  * Fetches the Tenant metadata and performs basic aggregations.
  */
 export async function getTenantDashboardData(tenantId: string) {
-  // Fetch tenant metadata
-  const tenantRes = await docClient.send(new GetCommand({
-    TableName: TABLE_NAME,
-    Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" }
-  }));
+  const [tenantRes, assetsRes, empRes, pendingRequests] = await Promise.all([
+    docClient.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" }
+    })),
+    docClient.send(new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": `TENANT#${tenantId}`,
+        ":sk": "ASSET#"
+      }
+    })),
+    docClient.send(new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": `TENANT#${tenantId}`,
+        ":sk": "EMP#"
+      }
+    })),
+    getPendingProcurementRequests(tenantId)
+  ]);
+
   const tenant = tenantRes.Item as Tenant | undefined;
-
-  // Fetch all assets for the tenant to do in-memory aggregate metrics (Total, Active, Procuring, Wiped, etc.)
-  const assetsRes = await docClient.send(new QueryCommand({
-    TableName: TABLE_NAME,
-    KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-    ExpressionAttributeValues: {
-      ":pk": `TENANT#${tenantId}`,
-      ":sk": "ASSET#"
-    }
-  }));
   const assets = (assetsRes.Items || []) as HardwareAsset[];
-
-  // Fetch all employees for the tenant
-  const empRes = await docClient.send(new QueryCommand({
-    TableName: TABLE_NAME,
-    KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-    ExpressionAttributeValues: {
-      ":pk": `TENANT#${tenantId}`,
-      ":sk": "EMP#"
-    }
-  }));
   const employees = (empRes.Items || []) as Employee[];
-
-  // Fetch pending procurement requests
-  const pendingRequests = await getPendingProcurementRequests(tenantId);
 
   return {
     tenant,
