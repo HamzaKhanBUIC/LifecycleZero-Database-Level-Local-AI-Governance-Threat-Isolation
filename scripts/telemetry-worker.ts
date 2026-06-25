@@ -3,26 +3,40 @@ import path from "path";
 import dotenv from "dotenv";
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from "@aws-sdk/client-sqs";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { evaluateTelemetryRisk } from "../src/lib/ai";
 
 dotenv.config({ path: ".env.local" });
+import { env } from "../src/lib/env";
 
 const QUEUE_FILE_PATH = path.join(process.cwd(), "scratch", "sqs-fallback-queue.json");
-const TABLE_NAME = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
+const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
 // DynamoDB initialization
-const isLocal = process.env.DB_LOCAL === "true";
+const isLocal = env("DB_LOCAL") === "true";
 const dynamoClient = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-east-1",
-  endpoint: isLocal ? "http://localhost:8000" : undefined,
-  credentials: isLocal ? { accessKeyId: "local", secretAccessKey: "local" } : undefined
+  region: env("AWS_REGION", "us-east-1"),
+  ...(isLocal ? {
+    endpoint: "http://localhost:8000",
+    credentials: { accessKeyId: "local", secretAccessKey: "local" }
+  } : env("AWS_ACCESS_KEY_ID") && env("AWS_SECRET_ACCESS_KEY") && {
+    credentials: {
+      accessKeyId: env("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: env("AWS_SECRET_ACCESS_KEY"),
+    }
+  })
 });
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
 // SQS Client
 const sqsClient = new SQSClient({
-  region: process.env.AWS_REGION || "us-east-1",
+  region: env("AWS_REGION", "us-east-1"),
+  ...(env("AWS_ACCESS_KEY_ID") && env("AWS_SECRET_ACCESS_KEY") && {
+    credentials: {
+      accessKeyId: env("AWS_ACCESS_KEY_ID"),
+      secretAccessKey: env("AWS_SECRET_ACCESS_KEY"),
+    }
+  })
 });
 
 async function processTelemetryItem(payload: any) {
@@ -68,6 +82,21 @@ async function processTelemetryItem(payload: any) {
     Item: telemetry
   }));
 
+  // Update Asset LastHeartbeat asynchronously
+  try {
+    await docClient.send(new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+      UpdateExpression: "SET LastHeartbeat = :ts",
+      ExpressionAttributeValues: {
+        ":ts": new Date().toISOString()
+      }
+    }));
+    console.log(`[WORKER] Updated heartbeat for ${assetId}`);
+  } catch (err) {
+    console.error(`[WORKER] Failed to update heartbeat for ${assetId}:`, err);
+  }
+
   console.log(`[WORKER SUCCESS] Processed event for ${assetId}. Risk: ${aiResult.riskLevel} - ${aiResult.reasoning}`);
 }
 
@@ -100,7 +129,7 @@ async function pollLocalQueue() {
 }
 
 async function pollAwsQueue() {
-  const queueUrl = process.env.SQS_QUEUE_URL;
+  const queueUrl = env("SQS_QUEUE_URL");
   if (!queueUrl) {
     console.error("❌ SQS_QUEUE_URL missing in production env.");
     return;
@@ -144,7 +173,7 @@ async function startWorker() {
   if (isLocal) {
     console.log(`📡 Mode: Local File System Queue (${QUEUE_FILE_PATH})`);
   } else {
-    console.log(`📡 Mode: AWS SQS Queue (${process.env.SQS_QUEUE_URL})`);
+    console.log(`📡 Mode: AWS SQS Queue (${env("SQS_QUEUE_URL")})`);
   }
 
   while (true) {

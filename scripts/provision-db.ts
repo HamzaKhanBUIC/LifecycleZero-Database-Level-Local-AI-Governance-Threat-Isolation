@@ -1,9 +1,13 @@
-import { 
-  DynamoDBClient, 
-  CreateTableCommand, 
+import dotenv from "dotenv";
+import {
+  DynamoDBClient,
+  CreateTableCommand,
   DeleteTableCommand,
-  UpdateTimeToLiveCommand
+  UpdateTimeToLiveCommand,
+  DescribeTableCommand,
 } from "@aws-sdk/client-dynamodb";
+
+dotenv.config({ path: ".env.local" });
 
 const isLocal = process.env.DB_LOCAL === "true";
 const tableName = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
@@ -12,15 +16,50 @@ const tableName = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-east-1",
   endpoint: isLocal ? "http://localhost:8000" : undefined,
-  credentials: isLocal ? { accessKeyId: "local", secretAccessKey: "local" } : undefined
+  credentials: isLocal ? { accessKeyId: "local", secretAccessKey: "local" } : undefined,
 });
+
+async function waitForTableActive(name: string, maxWaitSecs = 90) {
+  console.log(`⏳ Waiting for table "${name}" to become ACTIVE (up to ${maxWaitSecs}s)...`);
+  const deadline = Date.now() + maxWaitSecs * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const res = await client.send(new DescribeTableCommand({ TableName: name }));
+    const status = res.Table?.TableStatus;
+    if (status === "ACTIVE") {
+      console.log(`✅ Table is ACTIVE.`);
+      return;
+    }
+    console.log(`   Status: ${status} — waiting...`);
+  }
+  throw new Error(`Table did not become ACTIVE within ${maxWaitSecs}s`);
+}
+
+async function enableTTL() {
+  try {
+    await client.send(
+      new UpdateTimeToLiveCommand({
+        TableName: tableName,
+        TimeToLiveSpecification: { Enabled: true, AttributeName: "TTL" },
+      })
+    );
+    console.log("✅ TTL enabled on attribute 'TTL'.");
+  } catch (ttlError: any) {
+    // "already enabled" is not a real error
+    if (ttlError?.message?.includes("already")) {
+      console.log("ℹ️ TTL already enabled.");
+    } else {
+      console.error("⚠️ Could not enable TTL:", ttlError?.message);
+    }
+  }
+}
 
 async function provision() {
   const args = process.argv.slice(2);
   const shouldReset = args.includes("--reset");
 
   if (shouldReset && isLocal) {
-    console.log(`⚠️ Reset flag detected. Teardown table: ${tableName}...`);
+    console.log(`⚠️ Reset flag detected. Tearing down table: ${tableName}...`);
     try {
       await client.send(new DeleteTableCommand({ TableName: tableName }));
       console.log("✅ Old table deleted.");
@@ -33,63 +72,59 @@ async function provision() {
 
   const command = new CreateTableCommand({
     TableName: tableName,
-    BillingMode: "PAY_PER_REQUEST", // On-Demand capacity for zero-cost maintenance
+    BillingMode: "PAY_PER_REQUEST",
     AttributeDefinitions: [
       { AttributeName: "PK", AttributeType: "S" },
       { AttributeName: "SK", AttributeType: "S" },
       { AttributeName: "GSI1PK", AttributeType: "S" },
       { AttributeName: "GSI1SK", AttributeType: "S" },
       { AttributeName: "GSI2PK", AttributeType: "S" },
-      { AttributeName: "GSI2SK", AttributeType: "S" }
+      { AttributeName: "GSI2SK", AttributeType: "S" },
     ],
     KeySchema: [
       { AttributeName: "PK", KeyType: "HASH" },
-      { AttributeName: "SK", KeyType: "RANGE" }
+      { AttributeName: "SK", KeyType: "RANGE" },
     ],
     GlobalSecondaryIndexes: [
       {
         IndexName: "GSI1-OverloadIndex",
         KeySchema: [
           { AttributeName: "GSI1PK", KeyType: "HASH" },
-          { AttributeName: "GSI1SK", KeyType: "RANGE" }
+          { AttributeName: "GSI1SK", KeyType: "RANGE" },
         ],
-        Projection: { ProjectionType: "ALL" } // Fixes fetch amplification
+        Projection: { ProjectionType: "ALL" },
       },
       {
         IndexName: "GSI2-SparseWorkflow",
         KeySchema: [
           { AttributeName: "GSI2PK", KeyType: "HASH" },
-          { AttributeName: "GSI2SK", KeyType: "RANGE" }
+          { AttributeName: "GSI2SK", KeyType: "RANGE" },
         ],
-        Projection: { ProjectionType: "ALL" }
-      }
-    ]
+        Projection: { ProjectionType: "ALL" },
+      },
+    ],
   });
 
   try {
     await client.send(command);
-    console.log(`🎉 Table "${tableName}" successfully created and ready for access patterns.`);
-    
-    // Enable TTL
-    console.log("⏳ Enabling TTL on attribute 'TTL'...");
-    try {
-      await client.send(new UpdateTimeToLiveCommand({
-        TableName: tableName,
-        TimeToLiveSpecification: {
-          Enabled: true,
-          AttributeName: "TTL"
-        }
-      }));
-      console.log("✅ TTL enabled.");
-    } catch (ttlError) {
-      console.error("⚠️ Could not enable TTL (might not be supported in local mode):", ttlError);
+    console.log(`🎉 Table "${tableName}" create request accepted.`);
+
+    // Wait for ACTIVE before enabling TTL (production AWS needs ~5-10s)
+    if (!isLocal) {
+      await waitForTableActive(tableName);
     }
-    
+
+    await enableTTL();
   } catch (error: any) {
     if (error.name === "ResourceInUseException") {
-      console.error("❌ Table already exists. Run with '--reset' locally to wipe and recreate.");
+      console.log(`ℹ️ Table already exists — applying TTL idempotently.`);
+      if (!isLocal) {
+        await waitForTableActive(tableName).catch(() => {});
+      }
+      await enableTTL();
     } else {
-      console.error("❌ Provisioning failed:", error);
+      console.error("❌ Provisioning failed:", error.message || error);
+      process.exit(1);
     }
   }
 }

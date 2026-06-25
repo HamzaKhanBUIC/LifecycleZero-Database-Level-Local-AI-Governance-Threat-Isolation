@@ -1,5 +1,8 @@
+import dotenv from "dotenv";
 import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+
+dotenv.config({ path: ".env.local" });
 
 const isLocal = process.env.DB_LOCAL === "true";
 const tableName = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
@@ -67,6 +70,7 @@ async function seed() {
       EmployeeName: "Alice Chen",
       GSI1PK: "EMP#emp_alice",
       GSI1SK: "STATE#ACTIVE",
+      LastHeartbeat: timestamp,
       UpdatedAt: timestamp
     },
     {
@@ -149,6 +153,12 @@ async function seed() {
       GSI1SK: `EMP#${empId}`
     });
 
+    const lastHeartbeat = i === 4 
+      ? new Date(Date.now() - 10 * 60 * 1000).toISOString() // 10 minutes ago (Unreachable)
+      : i === 5 
+        ? timestamp // Active
+        : undefined;
+
     generatedItems.push({
       PK: `TENANT#${demoTenantId}`,
       SK: `ASSET#${assetId}`,
@@ -161,6 +171,7 @@ async function seed() {
       EmployeeName: `Test Employee ${i}`,
       GSI1PK: `EMP#${empId}`,
       GSI1SK: "STATE#ACTIVE",
+      LastHeartbeat: lastHeartbeat,
       UpdatedAt: timestamp
     });
   }
