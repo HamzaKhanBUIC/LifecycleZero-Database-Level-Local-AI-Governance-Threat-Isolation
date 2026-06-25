@@ -2,8 +2,20 @@ import { NextResponse } from 'next/server';
 import { getAssetById } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
 
+import { env } from '@/lib/env';
+
 export async function POST(request: Request) {
   try {
+    // 1. Agent Authentication Check (HMAC / API Key Verification)
+    const agentKey = request.headers.get("x-agent-key");
+    const expectedKey = env("AGENT_API_KEY", "demo_agent_key_99");
+    if (agentKey !== expectedKey) {
+      return NextResponse.json({
+        error: "UNAUTHORIZED_AGENT",
+        message: "Invalid or missing X-Agent-Key authentication header."
+      }, { status: 401 });
+    }
+
     const body = await request.json();
     const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress } = body;
 
@@ -12,13 +24,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields: tenantId, assetId, processName" }, { status: 400 });
     }
 
-    // 1. Fetch asset to check status
+    // 2. Fetch asset to check status
     const asset = await getAssetById(tenantId, assetId);
     if (!asset) {
       return NextResponse.json({ error: `Asset ${assetId} not found under tenant ${tenantId}.` }, { status: 404 });
     }
 
-    // 2. Reject telemetry if the host is isolated
+    // 3. Reject telemetry if the host is isolated
     if (asset.Status === "ISOLATED") {
       return NextResponse.json({
         error: "FORBIDDEN_ISOLATED",
