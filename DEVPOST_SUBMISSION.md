@@ -81,3 +81,6 @@ Below are the screenshots illustrating the live system in operation, showing the
 
 ### 5. Multi-Tenant Serverless Database & Ingest Architecture
 ![Database and Ingestion Architecture](public/system_architecture_diagram.png)
+
+### 6. Live Amazon DynamoDB Single-Table Database Console (Explore Items)
+![Amazon DynamoDB Live Console](public/dynamodb_console.png)

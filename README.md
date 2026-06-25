@@ -44,6 +44,9 @@ graph TD
 
 ![LifecycleZero System Architecture](public/system_architecture_diagram.png)
 
+### Live Amazon DynamoDB Single-Table Database Console
+![Amazon DynamoDB Live Console](public/dynamodb_console.png)
+
 ---
 
 ## Technical Highlights
