@@ -55,7 +55,7 @@ AWS Database Architects and Solution Architects will appreciate the implementati
 * **Operational Data Purging (TTL):** Telemetry records are tagged with an expiration epoch (90 days). DynamoDB automatically purges them, preventing storage bloat.
 * **ACID Transactions (TransactWriteCommand):** Isolation commands atomically update the asset's status to `ISOLATED` and insert an immutable `AUDIT` log entry. The operation is fully atomic; it either completely succeeds or rolls back. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
 * **Endpoint Ingestion Block:** The Ingestion API enforces network quarantine. If a laptop's asset record is `ISOLATED`, the API immediately rejects its telemetry with `403 Forbidden` (`FORBIDDEN_ISOLATED`).
-* **Asynchronous Telemetry Queue (SQS):** Ingestion is built for scale. Telemetry is POSTed to the API gateway, instantly placed on an AWS SQS queue (with a filesystem queue fallback for local development), and returns `202 Accepted` in ~20ms. A background worker script pulls events asynchronously to process them.
+* **Asynchronous Telemetry Queue (SQS):** Ingestion is built for scale. Telemetry is POSTed to the API gateway, instantly placed on an AWS SQS queue (with a filesystem queue fallback for local development), and returns `202 Accepted` in sub-50ms. A background worker script pulls events asynchronously to process them.
 * **Resilient SDK Client:** Configured with `maxAttempts: 5` and exponential backoff. Explicitly handles `TransactionCanceledException` (extracting cancellation codes) and `ProvisionedThroughputExceededException`.
 
 ---
