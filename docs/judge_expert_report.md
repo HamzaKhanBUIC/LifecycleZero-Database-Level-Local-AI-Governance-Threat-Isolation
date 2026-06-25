@@ -55,6 +55,8 @@ If either operation fails (e.g., database network drop, conditional check failur
 
 Ingestion is decoupled to handle high-frequency telemetry logs across thousands of active endpoints:
 
+![LifecycleZero System Architecture](../public/system_architecture_diagram.png)
+
 ```
 [Local Daemon] 
       │ (HTTPS POST)
@@ -110,10 +112,13 @@ Risk evaluation runs asynchronously on the queue worker using a multi-layered pr
 * **SaaS Subscription:** Billed starting at $8 per monitored endpoint per month.
 * **Enterprise Tier:** Dedicated Bedrock endpoints, customizable AI heuristics, 1-year historical compliance audit logs, and instant CSV/PDF export.
 
+### Customer Acquisition & Target Market
+* **Initial Target Segment:** Our initial target segment is 500-5000 employee technology companies with distributed remote workforces and existing Jamf or Intune MDM deployments.
+
 ---
 
 ## 8. Verification Results
 
-* **Integration Tests:** Ran `npm run test:integration` successfully, verifying single-table DynamoDB writes, sparse index GSI2 evictions, chronological audit trails, the atomic `ConditionCheck` failure path preventing duplicate emergency isolation, and edge gateway 403 blocks for quarantined host ingestion.
+* **Integration Tests:** Ran `npm run test:integration` successfully, verifying single-table DynamoDB writes, verifying that telemetry records below WARNING threshold do not populate GSI2 attributes, confirming sparse index behavior, chronological audit trails, the atomic `ConditionCheck` failure path preventing duplicate emergency isolation, and edge gateway 403 blocks for quarantined host ingestion.
 * **Compilation Status:** Validated using `npx tsc --noEmit` which completed with zero compilation errors.
 * **UI Load Performance:** Shifting heatmap rendering to Server Components eliminated client-side layout shifts and enabled a sub-200ms initial paint.

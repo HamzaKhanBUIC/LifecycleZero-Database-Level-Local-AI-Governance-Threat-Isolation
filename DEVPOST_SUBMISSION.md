@@ -12,6 +12,10 @@ LifecycleZero provides an end-to-end local AI governance platform:
 3. **Autonomous Risk Analysis:** An asynchronous queue worker pulls messages and routes them through a multi-tier AI evaluation pipeline (AWS Bedrock Claude 3 Haiku primary, falling back to Google Gemini or Groq) to evaluate risk.
 4. **Database-Level Isolation:** If an agentic threat is identified, an administrator can execute a single-click transaction in the SOC dashboard. This uses a DynamoDB TransactWriteCommand to atomically isolate the asset and write an immutable audit log, immediately blocking further ingestion at the API gateway edge. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
 
+## System Architecture
+
+![LifecycleZero System Architecture](public/system_architecture_diagram.png)
+
 ## How We Built It
 * **Frontend:** Next.js (App Router) styled with a clinical, high-contrast brutalist design system.
 * **Server-Pre-Rendering:** To handle high-density layouts, the fleet heatmap pre-renders 124 asset nodes on the server, bypassing layout shifts and providing a sub-200ms initial client paint.
@@ -41,3 +45,6 @@ Onboarding is completely frictionless. Once pushed by the MDM, the local daemon 
 
 ### Pricing Model
 LifecycleZero is sold as a standard B2B SaaS subscription starting at $8 per monitored endpoint per month. We offer an Enterprise tier that includes dedicated AWS Bedrock throughput, customizable risk heuristics, and long-term compliance audit logging.
+
+### Customer Acquisition and Target Market
+Our initial target segment is 500-5000 employee technology companies with distributed remote workforces and existing Jamf or Intune MDM deployments.

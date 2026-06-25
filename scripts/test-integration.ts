@@ -63,7 +63,7 @@ async function runTests() {
     const postPendingReqs = await getPendingProcurementRequests(testTenantId);
     const stillFound = postPendingReqs.some(r => r.RequestId === "REQ-TEST-001");
     if (stillFound) throw new Error("Fail: Resolved request is still in pending queue!");
-    console.log("✅ Sparse index eviction passed (Removed from GSI2).");
+    console.log("✅ Sparse index write verification passed (Removed from GSI2).");
 
     // 3. Verify Asset Assignment and Status
     console.log("\n4. Testing getActiveAssetsForEmployee (Access Pattern 1)...");
