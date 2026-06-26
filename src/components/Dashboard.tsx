@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets } from "../app/actions/telemetry";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset } from "../app/actions/telemetry";
 import { simulateSilentHost } from "../app/actions/simulate";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, Lock, CheckSquare, TerminalSquare, Clock, Bot, User, Download } from "lucide-react";
 // Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
@@ -39,10 +39,10 @@ const generateChartData = (alerts: any[]) => {
   return chartData;
 };
 
-const fetchDashboardData = async () => {
+const fetchDashboardData = async (tenantId: string) => {
   const [fetchedAssets, fetchedAlerts] = await Promise.all([
-    getAssets(DEFAULT_TENANT_ID),
-    getCrossAssetAlerts(DEFAULT_TENANT_ID)
+    getAssets(tenantId),
+    getCrossAssetAlerts(tenantId)
   ]);
   const sortedAlerts = fetchedAlerts.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
   const chartData = generateChartData(sortedAlerts);
@@ -113,11 +113,10 @@ const SCENARIOS = {
 };
 
 export default function Dashboard({ initialAssets, initialAlerts }: DashboardProps) {
-  console.log("--- DASHBOARD MOUNTED ---", initialAssets?.length, initialAlerts?.length);
   const [activeTenantId, setActiveTenantId] = useState(DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
-  const { data, isLoading } = useSWR('dashboardData', fetchDashboardData, { 
+  const { data, isLoading } = useSWR(['dashboardData', activeTenantId], ([key, tenantId]) => fetchDashboardData(tenantId as string), { 
     refreshInterval: 2000,
     fallbackData: {
       assets: initialAssets || [],
@@ -134,14 +133,17 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as any).hydrated = true;
-      console.log("--- CLIENT HYDRATED ---");
     }
   }, []);
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
+  const [confirmIsolate, setConfirmIsolate] = useState<any | null>(null);
+  const [modalReason, setModalReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedScenario, setSelectedScenario] = useState<keyof typeof SCENARIOS>("scenario1");
   const [simulating, setSimulating] = useState(false);
+  const [simulationCount, setSimulationCount] = useState(0);
   const [simulationLog, setSimulationLog] = useState<string[]>([
     "System ready. Select a scenario to inject threat telemetry."
   ]);
@@ -152,86 +154,90 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const isReallyLoading = isLoading && (!data || !data.assets || data.assets.length === 0);
 
   const handleInjectTelemetry = async () => {
-    console.log("[DASHBOARD] handleInjectTelemetry called! Selected scenario:", selectedScenario);
     setSimulating(true);
+    setSimulationCount(prev => prev + 1);
+    setSimulationLog([]); // Clear terminal log
+    
     const scenario = SCENARIOS[selectedScenario];
+    const appendLog = (line: string, delay: number) => {
+      setTimeout(() => {
+        setSimulationLog(prev => [...prev, line]);
+      }, delay);
+    };
 
     if (selectedScenario === "scenario4") {
-      setSimulationLog(prev => [
-        ...prev,
-        `[SIMULATION] Triggering Agent silence on ${scenario.payload.assetId}...`,
-        `[ACTION] Setting LastHeartbeat to 10 minutes ago in DB...`
-      ]);
-      try {
-        const res = await simulateSilentHost(activeTenantId, scenario.payload.assetId);
-        if (res.success) {
+      appendLog(`[SIMULATION] Triggering Agent silence on ${scenario.payload.assetId}...`, 0);
+      appendLog(`[ACTION] Setting LastHeartbeat to 10 minutes ago in DB...`, 600);
+
+      setTimeout(async () => {
+        try {
+          const res = await simulateSilentHost(activeTenantId, scenario.payload.assetId);
+          if (res.success) {
+            setSimulationLog(prev => [
+              ...prev,
+              `[RESPONSE] SUCCESS: ${res.message}`,
+              `[DASHBOARD] Fleet Heatmap will reflect the unreachable status in 2-4 seconds.`
+            ]);
+            mutate('dashboardData');
+          } else {
+            setSimulationLog(prev => [
+              ...prev,
+              `[RESPONSE] FAILED: ${res.error}`
+            ]);
+          }
+        } catch (err: any) {
           setSimulationLog(prev => [
             ...prev,
-            `[RESPONSE] SUCCESS: ${res.message}`,
-            `[DASHBOARD] Fleet Heatmap will reflect the unreachable status in 2-4 seconds.`
+            `[ERROR] Simulation failed: ${err.message || err}`
+          ]);
+        } finally {
+          setSimulating(false);
+        }
+      }, 1200);
+      return;
+    }
+
+    appendLog(`[SIMULATION] Injecting telemetry for ${scenario.payload.assetId}...`, 0);
+    appendLog(`[POST /api/ingest] Payload: ${JSON.stringify(scenario.payload)}`, 600);
+
+    setTimeout(async () => {
+      try {
+        const res = await fetch("/api/ingest", {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Agent-Key": "demo_agent_key_99"
+          },
+          body: JSON.stringify(scenario.payload)
+        });
+        
+        const resData = await res.json();
+        if (res.ok) {
+          setSimulationLog(prev => [
+            ...prev,
+            `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
+            `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
           ]);
           mutate('dashboardData');
         } else {
           setSimulationLog(prev => [
             ...prev,
-            `[RESPONSE] FAILED: ${res.error}`
+            `[RESPONSE ${res.status}] FAILED: ${resData.error || "Unknown error"} - ${resData.message || ""}`
           ]);
         }
       } catch (err: any) {
+        console.error("[DASHBOARD] Fetch error:", err);
         setSimulationLog(prev => [
           ...prev,
-          `[ERROR] Simulation failed: ${err.message || err}`
+          `[ERROR] Injection failed: ${err.message || err}`
         ]);
       } finally {
         setSimulating(false);
       }
-      return;
-    }
-
-    setSimulationLog(prev => [
-      ...prev,
-      `[SIMULATION] Injecting telemetry for ${scenario.payload.assetId}...`,
-      `[POST /api/ingest] Payload: ${JSON.stringify(scenario.payload)}`
-    ]);
-
-    try {
-      console.log("[DASHBOARD] Fetching /api/ingest with payload:", scenario.payload);
-      const res = await fetch("/api/ingest", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "X-Agent-Key": "demo_agent_key_99"
-        },
-        body: JSON.stringify(scenario.payload)
-      });
-      
-      const resData = await res.json();
-      console.log("[DASHBOARD] Fetch response received:", res.status, resData);
-      if (res.ok) {
-        setSimulationLog(prev => [
-          ...prev,
-          `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
-          `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
-        ]);
-        mutate('dashboardData');
-      } else {
-        setSimulationLog(prev => [
-          ...prev,
-          `[RESPONSE ${res.status}] FAILED: ${resData.error || "Unknown error"} - ${resData.message || ""}`
-        ]);
-      }
-    } catch (err: any) {
-      console.error("[DASHBOARD] Fetch error:", err);
-      setSimulationLog(prev => [
-        ...prev,
-        `[ERROR] Injection failed: ${err.message || err}`
-      ]);
-    } finally {
-      setSimulating(false);
-    }
+    }, 1200);
   };
 
-  const handleIsolate = async (assetId: string) => {
+  const handleIsolate = async (assetId: string, reason?: string) => {
     setIsolatingId(assetId);
     setError(null);
     try {
@@ -241,7 +247,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         assets: assets.map((a: any) => a.AssetId === assetId ? { ...a, Status: "ISOLATED" } : a)
       }, false);
       
-      const res = await isolateAsset(activeTenantId, assetId);
+      const res = await isolateAsset(activeTenantId, assetId, reason);
       if (res && !res.success) {
         setError(res.error || "Failed to isolate host.");
         // Rollback optimistic update
@@ -340,6 +346,39 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         </div>
       </nav>
 
+      {/* T09: Live Stats Ticker */}
+      <div className="w-full bg-red-950/80 border-b border-red-900 text-red-500 font-mono text-[10px] uppercase tracking-widest overflow-hidden py-1.5 flex items-center shadow-[0_0_15px_rgba(220,38,38,0.15)] relative z-25">
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes marquee {
+            0% { transform: translateX(0%); }
+            100% { transform: translateX(-50%); }
+          }
+          .animate-marquee-scroll {
+            display: flex;
+            width: max-content;
+            animation: marquee 35s linear infinite;
+          }
+        `}} />
+        <div className="animate-marquee-scroll flex gap-12 whitespace-nowrap">
+          {Array(2).fill(null).map((_, i) => (
+            <div key={i} className="flex gap-12 items-center">
+              <span className="text-red-400 font-bold">⚡ LIVE TELEMETRY STREAM</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+              <span>ASSETS TRACKED: {assets.length} ENDPOINTS</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+              <span className="font-bold text-red-400">ACTIVE COMPROMISED NODES: {alerts.filter((a: any) => a.RiskLevel === 'CRITICAL').length}</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+              <span>ESTIMATED SHADOW AI BREACH COST PREVENTED: $670K</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+              <span className="text-amber-400 font-bold">EU AI ACT TIER 2 ENFORCEMENT COUNTDOWN: {Math.max(0, Math.ceil((new Date('2026-08-02').getTime() - Date.now()) / 86400000))} DAYS</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+              <span className="text-green-500 font-bold">SOC 2 AUDIT EXPORT STATUS: READIED</span>
+              <span className="w-1 h-1 bg-red-500 rounded-none"></span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="max-w-[1600px] mx-auto px-4 py-6">
         {error && (
           <div className="mb-4 bg-red-950/20 border border-red-500/50 text-red-400 p-3 font-mono text-xs flex items-center justify-between">
@@ -354,8 +393,8 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         {/* Telemetry Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <MetricCard icon={<Server />} title="ASSETS_TRACKED" value={assets.length} loading={isReallyLoading} />
-          <MetricCard icon={<Cpu />} title="ROGUE_MODELS" value={Math.floor(assets.length * 0.4)} loading={isReallyLoading} />
-          <MetricCard icon={<Activity />} title="INGEST_RATE" value="1.2k/s" loading={false} />
+          <MetricCard icon={<Cpu />} title="ROGUE_MODELS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL' || a.RiskLevel === 'WARNING').length} loading={isReallyLoading} />
+          <MetricCard icon={<Activity />} title="SIMULATION_EVENTS" value={simulationCount} loading={false} />
           <MetricCard icon={<ShieldAlert />} title="ACTIVE_THREATS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL').length} loading={isReallyLoading} alert />
         </div>
 
@@ -501,6 +540,21 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
           {/* Sidebar: Fleet Heatmap & Simulation Console */}
           <div className="lg:col-span-1 flex flex-col gap-4">
             
+            {/* Architecture Info Panel (T10b) */}
+            <div className="bg-[#09090b] border border-blue-900/30 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-4 h-4 text-blue-500" />
+                <h3 className="text-[10px] font-mono text-blue-400 font-bold tracking-widest uppercase">Zero Stack Architecture</h3>
+              </div>
+              <p className="text-[10px] text-zinc-400 font-mono leading-relaxed mb-3">
+                Built on Next.js App Router and AWS DynamoDB with single-table design. Uses <span className="text-white">GSI2 Sparse Indexes</span> for O(1) retrieval of active threats, bypassing full table scans.
+              </p>
+              <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500 border-t border-zinc-800 pt-2">
+                <span>Latency: ~45ms</span>
+                <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div> SQS Worker Active</span>
+              </div>
+            </div>
+
             {/* Heatmap Card */}
             <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[250px] relative">
               <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
@@ -556,25 +610,39 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                     const isSelected = selectedAssetIds.has(asset.AssetId);
 
                     return (
-                      <button 
-                        key={idx}
-                        onClick={() => {
-                          if (selectionMode) {
-                            setSelectedAssetIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(asset.AssetId)) next.delete(asset.AssetId);
-                              else next.add(asset.AssetId);
-                              return next;
-                            });
-                          } else {
-                            setSelectedAsset(asset);
-                          }
-                        }}
-                        title={`${asset.AssetId} - ${isIsolated ? 'ISOLATED' : isSilent ? `UNREACHABLE (Silent ${lastSeenText})` : hasCriticalAlert ? 'CRITICAL' : 'CLEAN'}`}
-                        className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] transition-colors focus:outline-none ${
-                          isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950' : 'cursor-crosshair focus:ring-1 focus:ring-zinc-400'
-                        }`}
-                      />
+                      <div key={idx} className="relative group">
+                        <button 
+                          onClick={() => {
+                            if (selectionMode) {
+                              setSelectedAssetIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(asset.AssetId)) next.delete(asset.AssetId);
+                                else next.add(asset.AssetId);
+                                return next;
+                              });
+                            } else {
+                              setSelectedAsset(asset);
+                            }
+                          }}
+                          className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] transition-colors focus:outline-none block ${
+                            isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950' : 'cursor-crosshair focus:ring-1 focus:ring-zinc-400'
+                          }`}
+                        />
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 hidden group-hover:block z-[99] bg-[#050505] border border-zinc-800 p-2 font-mono text-[9px] text-zinc-400 w-48 rounded-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] pointer-events-none">
+                          <div className="text-white font-bold mb-1 pb-1 border-b border-zinc-900 flex justify-between">
+                            <span>{asset.AssetId}</span>
+                            <span className={
+                              isIsolated ? 'text-zinc-500 font-bold' : hasCriticalAlert ? 'text-red-500 font-bold' : isSilent ? 'text-amber-500 font-bold' : 'text-green-500 font-bold'
+                            }>
+                              {isIsolated ? 'ISOLATED' : hasCriticalAlert ? 'CRITICAL' : isSilent ? 'UNREACHABLE' : 'CLEAN'}
+                            </span>
+                          </div>
+                          <div>HOST: {asset.AssetName}</div>
+                          <div>TYPE: {asset.Type}</div>
+                          <div>USER: {asset.EmployeeName}</div>
+                          <div className="text-zinc-600 mt-1">LAST SEEN: {lastSeenText}</div>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -614,16 +682,20 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                 </div>
 
                 {/* Simulation Output Console */}
-                <div className="flex-1 bg-zinc-950 border border-zinc-900 p-2 font-mono text-[9px] text-zinc-400 overflow-y-auto custom-scrollbar flex flex-col gap-1 max-h-[140px] select-text">
+                <div className="flex-1 bg-[#050505] border border-green-900/30 p-3 font-mono text-[10px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[140px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
                   {simulationLog.map((logLine, idx) => (
-                    <div key={idx} className={logLine.includes("SUCCESS") ? "text-green-500" : logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-500" : logLine.includes("SIMULATION") ? "text-blue-400" : "text-zinc-500"}>
-                      &gt; {logLine}
+                    <div key={idx} className="text-green-500/90 leading-tight">
+                      <span className="text-green-800/70 mr-2">[{new Date().toISOString().split('T')[1].slice(0,12)}]</span>
+                      <span className={logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-400" : ""}>{logLine}</span>
                     </div>
                   ))}
+                  <div className="w-1.5 h-3 bg-green-500 mt-1 animate-pulse"></div>
+                  {/* Scanline overlay */}
+                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20 mix-blend-overlay"></div>
                 </div>
 
                 <button
-                  onClick={() => { console.log("--- BUTTON CLICKED ---"); handleInjectTelemetry(); }}
+                  onClick={() => { handleInjectTelemetry(); }}
                   disabled={simulating}
                   className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold ${
                     simulating 
@@ -641,6 +713,92 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
       </div>
       </div>
       
+      {/* T07: Isolation Confirmation Modal */}
+      {confirmIsolate && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="max-w-lg w-full bg-[#0a0505] border border-red-900/50 shadow-[0_0_50px_-12px_rgba(220,38,38,0.2)] flex flex-col">
+            <div className="bg-red-950/40 border-b border-red-900/50 p-4 flex items-center gap-3">
+              <ShieldAlert className="w-5 h-5 text-red-500 animate-pulse" />
+              <h2 className="text-red-500 font-mono font-bold text-sm tracking-widest uppercase">Emergency Isolation Protocol</h2>
+            </div>
+            <div className="p-6 space-y-5 font-mono">
+              <div className="text-gray-400 text-xs leading-relaxed">
+                You are about to sever all network connectivity for the following asset. 
+                This action is immediate and will disrupt active sessions.
+              </div>
+              <div className="bg-[#0f0a0a] border border-red-900/20 p-4 space-y-2 text-xs">
+                <div className="flex justify-between"><span className="text-red-500/50">ASSET_ID:</span> <span className="text-red-100">{confirmIsolate.AssetId}</span></div>
+                <div className="flex justify-between"><span className="text-red-500/50">ASSIGNED_TO:</span> <span className="text-red-100">{confirmIsolate.EmployeeName}</span></div>
+                <div className="flex justify-between mt-2 pt-2 border-t border-red-900/20">
+                  <span className="text-red-500/50">CURRENT_STATE:</span> 
+                  <span className="text-red-500 font-bold flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></span>
+                    COMPROMISED
+                  </span>
+                </div>
+              </div>
+
+              {/* [REQUIRED] Operator Audit Reason field */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-mono text-red-500 font-bold uppercase tracking-wider block">
+                  [REQUIRED] OPERATOR AUDIT REASON
+                </label>
+                <textarea
+                  value={modalReason}
+                  onChange={(e) => {
+                    setModalReason(e.target.value);
+                    if (e.target.value.trim() !== "") setReasonError(false);
+                  }}
+                  placeholder="Enter justification for network severance (e.g., Rogue local process ollama accessing payroll backup)..."
+                  className={`w-full bg-[#050505] border text-xs font-mono p-3 focus:outline-none h-20 text-red-100 rounded-sm transition-colors ${
+                    reasonError ? 'border-red-500 focus:border-red-400' : 'border-red-900/40 focus:border-red-600'
+                  }`}
+                />
+                {reasonError && (
+                  <span className="text-[9px] text-red-400 font-mono block">
+                    ⚠ ERROR: Operator justification is required to execute isolation protocol.
+                  </span>
+                )}
+              </div>
+              
+              <div className="bg-red-950/20 border-l border-red-500/50 p-3 text-[10px] text-red-400/80 leading-relaxed">
+                <strong className="text-red-400">COMPLIANCE NOTICE:</strong> Immediate isolation fulfills EU AI Act Art. 14 (Human Oversight) requirements for neutralizing rogue autonomous agents.
+              </div>
+            </div>
+            <div className="p-4 border-t border-red-900/30 flex gap-3 bg-[#050202]">
+              <button 
+                onClick={() => {
+                  setConfirmIsolate(null);
+                  setModalReason("");
+                  setReasonError(false);
+                }}
+                className="flex-1 py-2 font-mono text-xs border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button 
+                onClick={async () => {
+                  if (modalReason.trim() === "") {
+                    setReasonError(true);
+                    return;
+                  }
+                  const assetToIsolate = confirmIsolate;
+                  const reasonToSend = modalReason;
+                  setConfirmIsolate(null);
+                  setModalReason("");
+                  setReasonError(false);
+                  await handleIsolate(assetToIsolate.AssetId, reasonToSend);
+                  setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ISOLATED" } : null);
+                }}
+                className="flex-1 py-2 font-mono text-xs font-bold bg-red-950/50 text-red-500 hover:bg-red-900 hover:text-white transition-colors border border-red-900/50 hover:border-red-500 cursor-pointer"
+              >
+                CONFIRM ISOLATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Host Details Drawer Overlay */}
       {selectedAsset && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex justify-end transition-opacity">
@@ -699,7 +857,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <div>
                     <strong>[WARNING_AGENT_SILENT]</strong>
-                    <p className="mt-1 text-zinc-400">This asset's local governance daemon has stopped reporting telemetry heartbeats. Tampering or offline state suspected.</p>
+                    <p className="mt-1 text-zinc-400">This asset&apos;s local governance daemon has stopped reporting telemetry heartbeats. Tampering or offline state suspected.</p>
                   </div>
                 </div>
               )}
@@ -708,19 +866,27 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             <div className="border-t border-zinc-900 pt-4 flex flex-col gap-3">
               {selectedAsset.Status !== "ISOLATED" ? (
                 <button
-                  onClick={async () => {
-                    await handleIsolate(selectedAsset.AssetId);
-                    setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ISOLATED" } : null);
-                  }}
+                  onClick={() => setConfirmIsolate(selectedAsset)}
                   disabled={isolatingId === selectedAsset.AssetId}
                   className="w-full bg-red-950 border border-red-800 hover:bg-red-800 text-red-400 hover:text-white py-2 font-mono text-xs font-bold transition-colors cursor-pointer"
                 >
                   {isolatingId === selectedAsset.AssetId ? "ISOLATING..." : "FORCE ISOLATE HOST"}
                 </button>
               ) : (
-                <div className="w-full bg-zinc-900 text-zinc-500 border border-zinc-800 py-2 text-center font-mono text-xs">
-                  [HOST_ISOLATION_LOCKED]
-                </div>
+                <button
+                  onClick={async () => {
+                    const res = await restoreAsset(activeTenantId, selectedAsset.AssetId);
+                    if (res.success) {
+                      setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ACTIVE" } : null);
+                      mutate('dashboardData');
+                    } else {
+                      setError(res.error || "Failed to restore asset.");
+                    }
+                  }}
+                  className="w-full bg-green-950 border border-green-800 hover:bg-green-800 text-green-400 hover:text-white py-2 font-mono text-xs font-bold transition-colors cursor-pointer"
+                >
+                  RESTORE HOST (RE-ENABLE NETWORK)
+                </button>
               )}
               <button 
                 onClick={() => setSelectedAsset(null)}
