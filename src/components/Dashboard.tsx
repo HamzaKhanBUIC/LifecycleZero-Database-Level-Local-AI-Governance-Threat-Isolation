@@ -7,6 +7,8 @@ import { simulateSilentHost } from "../app/actions/simulate";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, Lock, CheckSquare, TerminalSquare, Clock, Bot, User, Download } from "lucide-react";
 // Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import Tactical3DGrid from "./Tactical3DGrid";
+
 
 const TENANTS = [
   { id: "org_demo_123",      name: "Acme Corp (Demo)" },
@@ -126,8 +128,10 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   });
   const [isolatingId, setIsolatingId] = useState<string | null>(null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [view3d, setView3d] = useState(true); // Default to true (3D) to wow the user on first load!
   const [selectionMode, setSelectionMode] = useState(false);
   const [bulkIsolating, setBulkIsolating] = useState(false);
+
   const [bulkResult, setBulkResult] = useState<string | null>(null);
   
   useEffect(() => {
@@ -556,7 +560,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             </div>
 
             {/* Heatmap Card */}
-            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[250px] relative">
+            <div className={`bg-[#09090b] border border-zinc-800 flex flex-col relative transition-all duration-300 ${view3d ? 'h-[360px]' : 'h-[250px]'}`}>
               <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                   <Server className="w-4 h-4" />
@@ -568,7 +572,17 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                   )}
                 </h2>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-zinc-500">TOTAL: {assets.length}</span>
+                  <span className="text-[10px] font-mono text-zinc-500 mr-2">TOTAL: {assets.length}</span>
+                  <button
+                    onClick={() => setView3d(v => !v)}
+                    className={`font-mono text-[9px] px-2 py-0.5 border mr-1 transition-colors cursor-pointer ${
+                      view3d
+                        ? 'border-blue-700 text-blue-400 bg-blue-950/20'
+                        : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
+                    }`}
+                  >
+                    {view3d ? '2D VIEW' : '3D VIEW'}
+                  </button>
                   <button
                     onClick={() => { setSelectionMode(m => !m); setSelectedAssetIds(new Set()); }}
                     className={`font-mono text-[9px] px-2 py-0.5 border transition-colors ${
@@ -591,67 +605,83 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                 </div>
               </div>
               
-              <div className="p-3 overflow-y-auto custom-scrollbar flex-1">
-                <div className="flex flex-wrap gap-[3px]">
-                  {assets.map((asset: any, idx: number) => {
-                    const hasCriticalAlert = alerts.some((a: any) => a.AssetId === asset.AssetId && a.RiskLevel === 'CRITICAL');
-                    const isIsolated = asset.Status === 'ISOLATED';
-                    const isSilent = isUnreachable(asset);
-                    
-                    let bgColor = 'bg-green-500/80 hover:bg-green-400';
-                    if (isIsolated) bgColor = 'bg-zinc-700 hover:bg-zinc-600';
-                    else if (hasCriticalAlert) bgColor = 'bg-red-500 hover:bg-red-400 animate-pulse';
-                    else if (isSilent) bgColor = 'bg-amber-500 hover:bg-amber-400';
+              <div className="flex-1 relative min-h-0">
+                {view3d ? (
+                  <Tactical3DGrid
+                    assets={assets}
+                    alerts={alerts}
+                    isUnreachable={isUnreachable}
+                    selectionMode={selectionMode}
+                    selectedAssetIds={selectedAssetIds}
+                    setSelectedAssetIds={setSelectedAssetIds}
+                    setSelectedAsset={setSelectedAsset}
+                  />
+                ) : (
+                  <div className="p-3 overflow-y-auto custom-scrollbar h-full flex flex-col justify-between">
+                    <div>
+                      <div className="flex flex-wrap gap-[3px]">
+                        {assets.map((asset: any, idx: number) => {
+                          const hasCriticalAlert = alerts.some((a: any) => a.AssetId === asset.AssetId && a.RiskLevel === 'CRITICAL');
+                          const isIsolated = asset.Status === 'ISOLATED';
+                          const isSilent = isUnreachable(asset);
+                          
+                          let bgColor = 'bg-green-500/80 hover:bg-green-400';
+                          if (isIsolated) bgColor = 'bg-zinc-700 hover:bg-zinc-600';
+                          else if (hasCriticalAlert) bgColor = 'bg-red-500 hover:bg-red-400 animate-pulse';
+                          else if (isSilent) bgColor = 'bg-amber-500 hover:bg-amber-400';
 
-                    const lastSeenText = asset.LastHeartbeat 
-                      ? `${Math.floor((Date.now() - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
-                      : "Never";
+                          const lastSeenText = asset.LastHeartbeat 
+                            ? `${Math.floor((Date.now() - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
+                            : "Never";
 
-                    const isSelected = selectedAssetIds.has(asset.AssetId);
+                          const isSelected = selectedAssetIds.has(asset.AssetId);
 
-                    return (
-                      <div key={idx} className="relative group">
-                        <button 
-                          onClick={() => {
-                            if (selectionMode) {
-                              setSelectedAssetIds(prev => {
-                                const next = new Set(prev);
-                                if (next.has(asset.AssetId)) next.delete(asset.AssetId);
-                                else next.add(asset.AssetId);
-                                return next;
-                              });
-                            } else {
-                              setSelectedAsset(asset);
-                            }
-                          }}
-                          className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] transition-colors focus:outline-none block ${
-                            isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950' : 'cursor-crosshair focus:ring-1 focus:ring-zinc-400'
-                          }`}
-                        />
-                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 hidden group-hover:block z-[99] bg-[#050505] border border-zinc-800 p-2 font-mono text-[9px] text-zinc-400 w-48 rounded-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] pointer-events-none">
-                          <div className="text-white font-bold mb-1 pb-1 border-b border-zinc-900 flex justify-between">
-                            <span>{asset.AssetId}</span>
-                            <span className={
-                              isIsolated ? 'text-zinc-500 font-bold' : hasCriticalAlert ? 'text-red-500 font-bold' : isSilent ? 'text-amber-500 font-bold' : 'text-green-500 font-bold'
-                            }>
-                              {isIsolated ? 'ISOLATED' : hasCriticalAlert ? 'CRITICAL' : isSilent ? 'UNREACHABLE' : 'CLEAN'}
-                            </span>
-                          </div>
-                          <div>HOST: {asset.AssetName}</div>
-                          <div>TYPE: {asset.Type}</div>
-                          <div>USER: {asset.EmployeeName}</div>
-                          <div className="text-zinc-600 mt-1">LAST SEEN: {lastSeenText}</div>
-                        </div>
+                          return (
+                            <div key={idx} className="relative group">
+                              <button 
+                                onClick={() => {
+                                  if (selectionMode) {
+                                    setSelectedAssetIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(asset.AssetId)) next.delete(asset.AssetId);
+                                      else next.add(asset.AssetId);
+                                      return next;
+                                    });
+                                  } else {
+                                    setSelectedAsset(asset);
+                                  }
+                                }}
+                                className={`w-[13px] h-[13px] ${bgColor} rounded-[2px] transition-colors focus:outline-none block ${
+                                  isSelected ? 'ring-2 ring-white ring-offset-1 ring-offset-zinc-950' : 'cursor-crosshair focus:ring-1 focus:ring-zinc-400'
+                                }`}
+                              />
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 hidden group-hover:block z-[99] bg-[#050505] border border-zinc-800 p-2 font-mono text-[9px] text-zinc-400 w-48 rounded-[2px] shadow-[0_4px_12px_rgba(0,0,0,0.5)] pointer-events-none">
+                                <div className="text-white font-bold mb-1 pb-1 border-b border-zinc-900 flex justify-between">
+                                  <span>{asset.AssetId}</span>
+                                  <span className={
+                                    isIsolated ? 'text-zinc-500 font-bold' : hasCriticalAlert ? 'text-red-500 font-bold' : isSilent ? 'text-amber-500 font-bold' : 'text-green-500 font-bold'
+                                  }>
+                                    {isIsolated ? 'ISOLATED' : hasCriticalAlert ? 'CRITICAL' : isSilent ? 'UNREACHABLE' : 'CLEAN'}
+                                  </span>
+                                </div>
+                                <div>HOST: {asset.AssetName}</div>
+                                <div>TYPE: {asset.Type}</div>
+                                <div>USER: {asset.EmployeeName}</div>
+                                <div className="text-zinc-600 mt-1">LAST SEEN: {lastSeenText}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex flex-col gap-1.5 border-t border-zinc-800 pt-2.5">
-                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-green-500/80 rounded-[2px]"></div> CLEAN / ACTIVE</div>
-                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-amber-500 rounded-[2px]"></div> UNREACHABLE / AGENT SILENT</div>
-                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-red-500 rounded-[2px]"></div> CRITICAL RISK</div>
-                  <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-zinc-700 rounded-[2px]"></div> ISOLATED / OFFLINE</div>
-                </div>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-1.5 border-t border-zinc-800 pt-2.5">
+                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-green-500/80 rounded-[2px]"></div> CLEAN / ACTIVE</div>
+                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-amber-500 rounded-[2px]"></div> UNREACHABLE / AGENT SILENT</div>
+                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-red-500 rounded-[2px]"></div> CRITICAL RISK</div>
+                      <div className="flex items-center gap-2 text-[9px] font-mono text-zinc-500"><div className="w-2.5 h-2.5 bg-zinc-700 rounded-[2px]"></div> ISOLATED / OFFLINE</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
