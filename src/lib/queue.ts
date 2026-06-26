@@ -5,10 +5,11 @@ import { env } from "./env";
 
 const QUEUE_FILE_PATH = path.join(process.cwd(), "scratch", "sqs-fallback-queue.json");
 
-// Ensure scratch directory exists
-const scratchDir = path.dirname(QUEUE_FILE_PATH);
-if (!fs.existsSync(scratchDir)) {
-  fs.mkdirSync(scratchDir, { recursive: true });
+function ensureScratchDir() {
+  const scratchDir = path.dirname(QUEUE_FILE_PATH);
+  if (!fs.existsSync(scratchDir)) {
+    fs.mkdirSync(scratchDir, { recursive: true });
+  }
 }
 
 // SQS Client — all env vars sanitized via env() to strip PowerShell-injected BOM (\uFEFF)
@@ -25,6 +26,7 @@ const sqsClient = new SQSClient({
 
 export async function sendToQueue(payload: any) {
   if (isLocal) {
+    ensureScratchDir();
     // Local simulation: Append message to the local JSON queue file
     let queue: any[] = [];
     if (fs.existsSync(QUEUE_FILE_PATH)) {
