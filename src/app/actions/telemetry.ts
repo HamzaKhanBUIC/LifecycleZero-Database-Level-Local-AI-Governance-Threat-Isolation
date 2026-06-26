@@ -82,10 +82,10 @@ export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
 /**
  * Isolate an asset immediately, writing to the audit log.
  */
-export async function isolateAsset(tenantId: string, assetId: string) {
+export async function isolateAsset(tenantId: string, assetId: string, reason?: string) {
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  let actorName = "Security Administrator";
+  const actorName = "Security Administrator";
   try {
     const context = await getTenantContext();
     if (context.tenantId) {
@@ -118,7 +118,7 @@ export async function isolateAsset(tenantId: string, assetId: string) {
       actorId,
       actorName,
       action: "EMERGENCY_ISOLATION",
-      details: "Asset isolated due to critical anomalous behavior detected by local AI engine."
+      details: reason || "Asset isolated due to critical anomalous behavior detected by local AI engine."
     });
 
     return { success: true, message: `Asset ${assetId} has been successfully isolated.` };
@@ -127,6 +127,55 @@ export async function isolateAsset(tenantId: string, assetId: string) {
     return { 
       success: false, 
       error: error.message || "An unexpected database error occurred during isolation." 
+    };
+  }
+}
+
+/**
+ * Restore an asset from isolation, writing to the audit log.
+ */
+export async function restoreAsset(tenantId: string, assetId: string) {
+  let activeTenantId = tenantId;
+  let actorId = "ADMIN_123";
+  const actorName = "Security Administrator";
+  try {
+    const context = await getTenantContext();
+    if (context.tenantId) {
+      activeTenantId = context.tenantId;
+      actorId = context.userId || actorId;
+    }
+  } catch (e) {
+    console.warn("[restoreAsset] Fallback to client tenantId:", tenantId);
+  }
+
+  const asset = await getAssetById(activeTenantId, assetId);
+  if (!asset) {
+    throw new Error(`Asset ${assetId} not found.`);
+  }
+
+  if (asset.Status === "ACTIVE") {
+    return { success: true, message: "Asset is already active." };
+  }
+
+  try {
+    await updateAssetStatusTransaction({
+      tenantId: activeTenantId,
+      assetId,
+      newStatus: "ACTIVE",
+      assignedEmployeeId: asset.EmployeeId,
+      assignedEmployeeName: asset.EmployeeName,
+      actorId,
+      actorName,
+      action: "RESTORE_FROM_ISOLATION",
+      details: "Asset restored from isolation by administrator. Connectivity and access restored."
+    });
+
+    return { success: true, message: `Asset ${assetId} has been successfully restored.` };
+  } catch (error: any) {
+    console.error(`❌ Restore transaction failed for asset ${assetId}:`, error);
+    return { 
+      success: false, 
+      error: error.message || "An unexpected database error occurred during restoration." 
     };
   }
 }
@@ -154,7 +203,7 @@ export async function bulkIsolateAssets(
 
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  let actorName = "Security Administrator";
+  const actorName = "Security Administrator";
   try {
     const context = await getTenantContext();
     if (context.tenantId) {
