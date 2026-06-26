@@ -103,6 +103,11 @@ async function provision() {
         Projection: { ProjectionType: "ALL" },
       },
     ],
+    SSESpecification: {
+      Enabled: true,
+      SSEType: "KMS",
+      KMSMasterKeyId: process.env.AWS_KMS_KEY_ARN || undefined,
+    },
   });
 
   try {

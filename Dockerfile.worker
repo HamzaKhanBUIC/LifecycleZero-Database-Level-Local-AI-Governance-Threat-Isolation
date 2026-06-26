@@ -1,0 +1,21 @@
+# Base image with Node.js
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files
+COPY package*.json ./
+
+# Install dependencies (including devDependencies like tsx/typescript)
+RUN npm ci
+
+# Copy the rest of the application files
+COPY . .
+
+# Set default environment variables
+ENV NODE_ENV=production
+ENV DB_LOCAL=false
+
+# Execute SQS telemetry worker
+CMD ["npm", "run", "prod:worker"]

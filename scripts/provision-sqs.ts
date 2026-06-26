@@ -52,6 +52,9 @@ async function provision() {
         VisibilityTimeout: "30",
         // Long-polling enabled by default
         ReceiveMessageWaitTimeSeconds: "5",
+        // KMS encryption at rest
+        KmsMasterKeyId: process.env.AWS_KMS_KEY_ARN || "alias/aws/sqs",
+        KmsDataKeyReusePeriodSeconds: "300",
       },
     })
   );

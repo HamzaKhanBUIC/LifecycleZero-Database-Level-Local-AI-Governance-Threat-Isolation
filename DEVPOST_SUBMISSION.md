@@ -24,7 +24,7 @@ LifecycleZero is an end-to-end local AI governance platform built around a live 
 * **Database (DynamoDB Single-Table Design):** To support complex B2B relational queries at scale without the latency of SQL joins, we mapped multiple core data models (Tenant Metadata, Employees, Assets, Procurement Requests, Telemetry, and Audit Logs) into a single, unified DynamoDB table. Strict multi-tenant security is enforced at the Partition Key level (`PK = TENANT#<TenantId>`), ensuring absolute cryptographic isolation of organization data.
 * **Cost-Optimized Sparse GSI (GSI2):** Because 99.8% of high-frequency endpoint telemetry is benign, writing index keys for all events would inflate database query and storage costs. Instead, we implemented a Sparse GSI (`GSI2PK`) that only populates when a security risk is flagged (`CRITICAL` or `WARNING`). The React dashboard queries `GSI2` directly, retrieving active threat alerts in milliseconds with zero-cost, O(1) database scans instead of full-table scans.
 * **ACID Containment Transactions (`TransactWriteItems`):** Real-time isolation requires transactional integrity to meet compliance audits (SOC 2, ISO 27001). Clicking "Isolate Host" triggers a Next.js Server Action running the `updateAssetStatusTransaction` transaction. This executes a `TransactWriteItems` call, atomically updating the host state to `ISOLATED` (validated by a ConditionCheck ensuring the asset is active) and appending an immutable custody log. If either step fails, the entire transaction rolls back instantly, eliminating inconsistent states.
-* **Queueing & Async Workers:** AWS SQS handles telemetry decoupling. A dedicated TypeScript worker pulls and processes events asynchronously.
+* **Queueing & Async Workers:** AWS SQS handles telemetry decoupling. A dedicated TypeScript worker pulls and processes events asynchronously (containerized with a Dockerfile and ECS Fargate task definition for continuous background processing).
 * **AI Evaluation Pipeline:** Powered by AWS Bedrock (Claude 3 Haiku) as the enterprise-grade primary model, with automated failover handling to Google Gemini and Groq to ensure continuous runtime security.
 
 ## Challenges We Ran Into
@@ -55,9 +55,9 @@ Our initial target segment is 500-5000 employee technology companies with distri
 
 ## Security & Compliance Specifications (HIPAA & SOC 2 Ready)
 To satisfy stringent B2B healthcare and finance audit requirements, LifecycleZero implements:
-* **Encryption at Rest:** All data stored in AWS DynamoDB and queued in AWS SQS is encrypted at rest using **AWS KMS Customer Managed Keys (CMK)**.
+* **Encryption at Rest:** All data stored in AWS DynamoDB and queued in AWS SQS is encrypted at rest using **AWS KMS Customer Managed Keys (CMK)** (with default fallback to AWS Managed KMS keys).
 * **Encryption in Transit:** All telemetry streams, dashboard requests, and administrative operations are encrypted in transit using **TLS 1.3**.
-* **Workload Attestation:** Endpoints register and stream telemetry utilizing unique, cryptographically signed hardware enrollment tokens.
+* **Workload Authentication:** Endpoints authenticate and stream telemetry utilizing secure agent enrollment keys (supporting full cryptographic attestation and SPIFFE/SPIRE on the production roadmap).
 
 ## Open-Source Host Agent Daemon
 The client-side telemetry daemon is fully open-source, promoting security auditing and developer trust:

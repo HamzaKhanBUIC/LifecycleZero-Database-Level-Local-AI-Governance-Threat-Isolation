@@ -1,0 +1,66 @@
+{
+  "family": "lifecycle-zero-telemetry-worker",
+  "networkMode": "awsvpc",
+  "taskRoleArn": "arn:aws:iam::443628962705:role/LifecycleZeroTaskRole",
+  "executionRoleArn": "arn:aws:iam::443628962705:role/LifecycleZeroTaskExecutionRole",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "telemetry-worker",
+      "image": "443628962705.dkr.ecr.us-east-1.amazonaws.com/lifecycle-zero-worker:latest",
+      "essential": true,
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "DB_LOCAL",
+          "value": "false"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "DYNAMODB_TABLE",
+          "value": "LifecycleZero_Assets"
+        },
+        {
+          "name": "SQS_QUEUE_URL",
+          "value": "https://sqs.us-east-1.amazonaws.com/443628962705/LifecycleZero_TelemetryQueue"
+        },
+        {
+          "name": "AI_PROVIDER_PRIMARY",
+          "value": "bedrock"
+        },
+        {
+          "name": "AI_PROVIDER_SECONDARY",
+          "value": "gemini"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "GEMINI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:443628962705:secret:LifecycleZero_Secrets-abc123:GEMINI_API_KEY"
+        },
+        {
+          "name": "GROQ_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:443628962705:secret:LifecycleZero_Secrets-abc123:GROQ_API_KEY"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/lifecycle-zero-worker",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "worker"
+        }
+      }
+    }
+  ]
+}

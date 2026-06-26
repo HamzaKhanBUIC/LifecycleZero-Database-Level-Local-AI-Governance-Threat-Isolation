@@ -7,6 +7,7 @@ dotenv.config({ path: ".env.local" });
 const INGEST_URL = process.env.INGEST_URL || "http://localhost:3000/api/ingest";
 const TENANT_ID = process.env.TENANT_ID || "org_demo_123";
 const ASSET_ID = process.argv[2] || "AST-M3PRO-001"; // Alice Chen's MacBook Pro
+const AGENT_KEY = process.argv[3] || process.env.AGENT_API_KEY || "demo_agent_key_99";
 
 // Benign vs Threat processes we want to detect
 const BENIGN_PROCESSES = ["chrome.exe", "vscode.exe", "docker", "slack", "zoom", "node.exe", "powershell.exe"];
@@ -120,6 +121,7 @@ async function runAgent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Agent-Key": AGENT_KEY,
         },
         body: JSON.stringify(payload),
       });
