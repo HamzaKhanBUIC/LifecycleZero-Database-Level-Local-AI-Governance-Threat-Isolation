@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAssetById } from '@/lib/dao';
+import { getAssetById, createHardwareAsset } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
 import { env } from '@/lib/env';
 import { evaluateTelemetryRisk } from '@/lib/ai';
@@ -11,8 +11,9 @@ const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 async function processTelemetryInline(payload: any) {
   const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, timestamp } = payload;
   
+  const shardId = Math.floor(Math.random() * 10);
   const baseTelemetry = {
-    PK: `TENANT#${tenantId}`,
+    PK: `TENANT#${tenantId}#TELEMETRY#SHARD#${shardId}`,
     SK: `TELEMETRY#${assetId}#${timestamp}`,
     AssetId: assetId,
     Timestamp: timestamp,
@@ -70,28 +71,63 @@ async function processTelemetryInline(payload: any) {
 
 export async function POST(request: Request) {
   try {
-    // 1. Agent Authentication Check (HMAC / API Key Verification)
     const agentKey = request.headers.get("x-agent-key");
-    const expectedKey = env("AGENT_API_KEY", "demo_agent_key_99");
-    if (agentKey !== expectedKey) {
-      return NextResponse.json({
-        error: "UNAUTHORIZED_AGENT",
-        message: "Invalid or missing X-Agent-Key authentication header."
-      }, { status: 401 });
-    }
-
     const body = await request.json();
-    const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress } = body;
+    const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, hardwareUuid } = body;
 
     // Validation
     if (!tenantId || !assetId || !processName) {
       return NextResponse.json({ error: "Missing required fields: tenantId, assetId, processName" }, { status: 400 });
     }
 
-    // 2. Fetch asset to check status
-    const asset = await getAssetById(tenantId, assetId);
+    const globalEnrollmentKey = env("AGENT_API_KEY", "demo_agent_key_99");
+
+    // 2. Fetch asset to check status (auto-enroll if not exists)
+    let asset = await getAssetById(tenantId, assetId);
     if (!asset) {
-      return NextResponse.json({ error: `Asset ${assetId} not found under tenant ${tenantId}.` }, { status: 404 });
+      // New devices require the global enrollment key to onboard
+      if (agentKey !== globalEnrollmentKey) {
+        return NextResponse.json({
+          error: "UNAUTHORIZED_AGENT",
+          message: "Device registration requires a valid global enrollment key."
+        }, { status: 401 });
+      }
+
+      console.log(`[INGEST] Asset ${assetId} not found under tenant ${tenantId}. Auto-enrolling...`);
+      try {
+        const deviceSpecificKey = `key_${Math.random().toString(36).substring(2, 10)}_${Math.random().toString(36).substring(2, 10)}`;
+        asset = await createHardwareAsset(tenantId, {
+          AssetId: assetId,
+          AssetName: `Host Device (${assetId})`,
+          SerialNo: `SN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          Type: "LAPTOP",
+          Status: "ACTIVE",
+          EmployeeId: "UNASSIGNED",
+          EmployeeName: "Open Stock",
+          AgentKey: deviceSpecificKey,
+          HardwareUuid: hardwareUuid || undefined
+        });
+      } catch (enrollErr) {
+        console.error(`[INGEST] Auto-enrollment failed for asset ${assetId}:`, enrollErr);
+        return NextResponse.json({ error: `Asset ${assetId} not found and auto-enrollment failed.` }, { status: 404 });
+      }
+    } else {
+      // Validate device-specific key (fall back to global key if not set on legacy asset)
+      const expectedAgentKey = asset.AgentKey || globalEnrollmentKey;
+      if (agentKey !== expectedAgentKey) {
+        return NextResponse.json({
+          error: "UNAUTHORIZED_AGENT",
+          message: "Invalid X-Agent-Key credentials for this device."
+        }, { status: 401 });
+      }
+
+      // Mitigate device spoofing by checking hardware signature matches enrolled signature
+      if (asset.HardwareUuid && hardwareUuid && asset.HardwareUuid !== hardwareUuid) {
+        return NextResponse.json({
+          error: "SPOOFING_ATTEMPT",
+          message: "Ingestion rejected: Hardware UUID drift detected. Identification verification failed."
+        }, { status: 400 });
+      }
     }
 
     // 3. Reject telemetry if the host is isolated
@@ -128,6 +164,7 @@ export async function POST(request: Request) {
       success: true,
       status: "QUEUED",
       messageId: result.messageId,
+      agentKey: asset.AgentKey,
       message: "Telemetry received and queued for asynchronous evaluation."
     }, { status: 202 });
 
