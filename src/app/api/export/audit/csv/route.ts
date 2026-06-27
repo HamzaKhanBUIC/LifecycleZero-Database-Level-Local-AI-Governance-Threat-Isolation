@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAssets, getCrossAssetAlerts } from '@/app/actions/telemetry';
+import { getAssets, getCrossAssetAlerts } from '@/lib/api';
 
 export async function GET() {
   const TENANT_ID = "org_demo_123";

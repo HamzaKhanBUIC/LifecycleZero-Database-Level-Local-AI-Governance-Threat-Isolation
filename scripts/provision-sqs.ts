@@ -3,7 +3,6 @@ import {
   SQSClient,
   CreateQueueCommand,
   GetQueueUrlCommand,
-  ListQueuesCommand,
 } from "@aws-sdk/client-sqs";
 
 dotenv.config({ path: ".env.local" });

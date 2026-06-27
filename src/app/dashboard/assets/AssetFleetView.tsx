@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { HardwareAsset, Employee } from "@/lib/types";
-import { updateAssetStatusAction } from "@/app/actions/assets";
+import { updateAssetStatusAction } from "@/lib/api";
+import Sparkline from "@/components/Sparkline";
 
 interface AssetFleetViewProps {
   initialAssets: HardwareAsset[];
@@ -101,13 +102,14 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
                 <th className="p-4 font-mono text-[10px] tracking-wider">Serial Number</th>
                 <th className="p-4 font-mono text-[10px] tracking-wider">Assigned To</th>
                 <th className="p-4 font-mono text-[10px] tracking-wider">Status</th>
+                <th className="p-4 font-mono text-[10px] tracking-wider">Live Telemetry</th>
                 <th className="p-4 font-mono text-[10px] tracking-wider text-right">Quick Operations</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#262626] text-sm text-zinc-300">
               {filteredAssets.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-zinc-600 font-mono text-xs">[NO_ASSETS_FOUND_MATCHING_FILTERS]</td>
+                  <td colSpan={6} className="p-8 text-center text-zinc-600 font-mono text-xs">[NO_ASSETS_FOUND_MATCHING_FILTERS]</td>
                 </tr>
               ) : (
                 filteredAssets.map(asset => {
@@ -138,6 +140,9 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
                         <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold border ${statusStyles}`}>
                           {asset.Status}
                         </span>
+                      </td>
+                      <td className="p-4 font-mono text-xs">
+                        <Sparkline assetId={asset.AssetId} status={asset.Status} />
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex gap-2 justify-end">

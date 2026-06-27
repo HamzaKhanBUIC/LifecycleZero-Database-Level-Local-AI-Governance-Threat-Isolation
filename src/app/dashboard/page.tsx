@@ -1,14 +1,14 @@
 import { getTenantContext } from "@/lib/auth";
 import { getTenantDashboardData } from "@/lib/dao";
 import Link from "next/link";
-import { seedActiveTenantAction } from "../actions/seed";
+import { seedActiveTenantAction } from "@/lib/api";
 import { redirect } from "next/navigation";
 
 export default async function DashboardPage() {
   const { tenantId } = await getTenantContext();
   const data = await getTenantDashboardData(tenantId);
 
-  const { tenant, employees, assets, pendingRequests } = data;
+  const { tenant, assets, pendingRequests } = data;
 
   const totalAssets = assets.length;
   const activeFleet = assets.filter(a => a.Status === "ACTIVE").length;

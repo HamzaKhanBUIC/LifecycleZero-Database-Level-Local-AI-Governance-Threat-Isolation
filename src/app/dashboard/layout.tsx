@@ -8,14 +8,12 @@ export default async function DashboardLayout({
 }) {
   const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
   let userId: string | null = "user_mock_admin";
-  let orgId: string | null = "org_demo_123";
 
   // Only call Clerk auth when Clerk is active and a valid key exists
   if (!skipClerk && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith("pk_")) {
     const { auth } = await import("@clerk/nextjs/server");
     const authResult = await auth();
     userId = authResult.userId || null;
-    orgId = authResult.orgId || null;
   }
 
   if (!userId) {

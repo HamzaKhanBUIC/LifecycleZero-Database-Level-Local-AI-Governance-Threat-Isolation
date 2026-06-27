@@ -63,7 +63,7 @@ async function provision() {
     try {
       await client.send(new DeleteTableCommand({ TableName: tableName }));
       console.log("✅ Old table deleted.");
-    } catch (e) {
+    } catch {
       console.log("ℹ️ Table did not exist yet. Proceeding to creation.");
     }
   }

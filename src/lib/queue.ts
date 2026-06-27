@@ -32,7 +32,7 @@ export async function sendToQueue(payload: any) {
     if (fs.existsSync(QUEUE_FILE_PATH)) {
       try {
         queue = JSON.parse(fs.readFileSync(QUEUE_FILE_PATH, "utf-8"));
-      } catch (e) {
+      } catch {
         queue = [];
       }
     }

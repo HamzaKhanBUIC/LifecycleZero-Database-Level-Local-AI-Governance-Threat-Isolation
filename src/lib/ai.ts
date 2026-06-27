@@ -18,7 +18,7 @@ function safeParseJSON(text: string): any {
   const cleaned = text.trim();
   try {
     return JSON.parse(cleaned);
-  } catch (e) {
+  } catch {
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {

@@ -28,3 +28,35 @@ body {
 .preserve-3d {
   transform-style: preserve-3d;
 }
+
+/* Custom Scrollbar Styles for Brutalist Console UI */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #09090b;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border: 1px solid #18181b;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Also apply custom-scrollbar to all element scrollbars globally inside dark panels */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border: 1px solid #18181b;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}

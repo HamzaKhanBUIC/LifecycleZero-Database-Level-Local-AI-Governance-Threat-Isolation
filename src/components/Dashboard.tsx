@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset } from "../app/actions/telemetry";
-import { simulateSilentHost } from "../app/actions/simulate";
-import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, Lock, CheckSquare, TerminalSquare, Clock, Bot, User, Download } from "lucide-react";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost } from "@/lib/api";
+import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
 // Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Tactical3DGrid from "./Tactical3DGrid";
+import { audio } from "@/lib/audio";
 
 
 const TENANTS = [
@@ -118,7 +118,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [activeTenantId, setActiveTenantId] = useState(DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
-  const { data, isLoading } = useSWR(['dashboardData', activeTenantId], ([key, tenantId]) => fetchDashboardData(tenantId as string), { 
+  const { data, isLoading } = useSWR(['dashboardData', activeTenantId], ([, tenantId]) => fetchDashboardData(tenantId as string), { 
     refreshInterval: 2000,
     fallbackData: {
       assets: initialAssets || [],
@@ -132,7 +132,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [selectionMode, setSelectionMode] = useState(false);
   const [bulkIsolating, setBulkIsolating] = useState(false);
 
-  const [bulkResult, setBulkResult] = useState<string | null>(null);
+
   
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -144,6 +144,29 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [modalReason, setModalReason] = useState("");
   const [reasonError, setReasonError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Audio and CLI states
+  const [isMuted, setIsMuted] = useState(() => audio.isMuted());
+  const [cliInput, setCliInput] = useState("");
+  const [cliHistory, setCliHistory] = useState<string[]>([
+    "LIFECYCLEZERO SECURITY INTERACTIVE COMMAND LINE v9.0.0",
+    "ENTER 'help' TO VIEW ALL CONSOLE OPERATIONS.",
+    ""
+  ]);
+  const cliEndRef = useRef<HTMLDivElement>(null);
+
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    cliEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [cliHistory]);
 
   const [selectedScenario, setSelectedScenario] = useState<keyof typeof SCENARIOS>("scenario1");
   const [simulating, setSimulating] = useState(false);
@@ -182,6 +205,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
               `[RESPONSE] SUCCESS: ${res.message}`,
               `[DASHBOARD] Fleet Heatmap will reflect the unreachable status in 2-4 seconds.`
             ]);
+            audio.playAlarm();
             mutate('dashboardData');
           } else {
             setSimulationLog(prev => [
@@ -222,6 +246,11 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
             `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
           ]);
+          if (scenario.payload.processName !== "cursor.exe") {
+            audio.playAlarm();
+          } else {
+            audio.playClick();
+          }
           mutate('dashboardData');
         } else {
           setSimulationLog(prev => [
@@ -257,6 +286,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
         // Rollback optimistic update
         mutate('dashboardData');
       } else {
+        audio.playSeverance();
         mutate('dashboardData'); 
       }
     } catch (err: any) {
@@ -268,21 +298,175 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
     }
   };
 
+  const handleCliSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cmdStr = cliInput.trim();
+    if (!cmdStr) return;
+
+    if (!isMuted) audio.playClick();
+    setCliHistory(prev => [...prev, `ADM@LIFECYCLEZERO:~$ ${cmdStr}`]);
+    setCliInput("");
+
+    const parts = cmdStr.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    switch (cmd) {
+      case "help":
+        setCliHistory(prev => [
+          ...prev,
+          "AVAILABLE OPERATIONS:",
+          "  help                - Display this instructions sheet",
+          "  clear               - Clear terminal screen log",
+          "  fleet / assets      - List all tracked hosts and health status",
+          "  isolate <AssetId>   - Trigger network isolation on host node",
+          "  restore <AssetId>   - Restore host network connection",
+          "  simulate <1-4>      - Trigger threat simulation scenario (1-4)",
+          "  audit               - Print host compliance isolation metrics",
+          "  mute / unmute       - Toggle tactile sound console",
+          ""
+        ]);
+        break;
+      case "clear":
+        setCliHistory([]);
+        break;
+      case "fleet":
+      case "assets":
+        if (assets.length === 0) {
+          setCliHistory(prev => [...prev, "  NO ENDPOINTS TRACKED IN FLEET.", ""]);
+        } else {
+          setCliHistory(prev => [
+            ...prev,
+            "CURRENT FLEET DIRECTORY:",
+            ...assets.map((a: any) => {
+              const hasCritical = alerts.some((al: any) => al.AssetId === a.AssetId && al.RiskLevel === "CRITICAL");
+              const isSilent = isUnreachable(a);
+              const statusStr = a.Status === "ISOLATED" ? "ISOLATED" : hasCritical ? "CRITICAL" : isSilent ? "UNREACHABLE" : "CLEAN";
+              return `  ${a.AssetId.padEnd(16)} | ${a.AssetName.padEnd(16)} | USER: ${a.EmployeeName.padEnd(12)} | STATUS: ${statusStr}`;
+            }),
+            ""
+          ]);
+        }
+        break;
+      case "isolate": {
+        const id = args[0]?.toUpperCase();
+        if (!id) {
+          setCliHistory(prev => [...prev, "  ERROR: Specify target asset ID (e.g., isolate AST-M3PRO-001)", ""]);
+          break;
+        }
+        const target = assets.find((a: any) => a.AssetId === id);
+        if (!target) {
+          setCliHistory(prev => [...prev, `  ERROR: Host '${id}' not found in registered tenant fleet.`, ""]);
+          break;
+        }
+        if (target.Status === "ISOLATED") {
+          setCliHistory(prev => [...prev, `  NOTICE: Host '${id}' is already network isolated.`, ""]);
+          break;
+        }
+        setConfirmIsolate(target);
+        setModalReason("Emergency command-line operation");
+        setCliHistory(prev => [...prev, `  [ACTION] Triggering compliance confirmation modal for host '${id}'...`, ""]);
+        break;
+      }
+      case "restore": {
+        const id = args[0]?.toUpperCase();
+        if (!id) {
+          setCliHistory(prev => [...prev, "  ERROR: Specify target asset ID (e.g., restore AST-M3PRO-001)", ""]);
+          break;
+        }
+        const target = assets.find((a: any) => a.AssetId === id);
+        if (!target) {
+          setCliHistory(prev => [...prev, `  ERROR: Host '${id}' not found in registered tenant fleet.`, ""]);
+          break;
+        }
+        if (target.Status !== "ISOLATED") {
+          setCliHistory(prev => [...prev, `  NOTICE: Host '${id}' is currently active and clean.`, ""]);
+          break;
+        }
+
+        setCliHistory(prev => [...prev, `  [ACTION] Restoring connectivity for host '${id}'...`, ""]);
+        try {
+          const res = await restoreAsset(activeTenantId, id);
+          if (res.success) {
+            setCliHistory(prev => [...prev, `  [SUCCESS] Host network link re-established for '${id}'.`, ""]);
+            if (!isMuted) audio.playClick();
+            mutate('dashboardData');
+          } else {
+            setCliHistory(prev => [...prev, `  [FAILED] API returned error: ${res.error}`, ""]);
+          }
+        } catch (err: any) {
+          setCliHistory(prev => [...prev, `  [ERROR] Network fault: ${err.message || err}`, ""]);
+        }
+        break;
+      }
+      case "simulate": {
+        const indexStr = args[0];
+        if (!indexStr || !["1", "2", "3", "4"].includes(indexStr)) {
+          setCliHistory(prev => [...prev, "  ERROR: Specify simulation scenario index (1-4).", ""]);
+          break;
+        }
+        const scMap = { "1": "scenario1", "2": "scenario2", "3": "scenario3", "4": "scenario4" } as const;
+        const selectedSc = scMap[indexStr as "1"|"2"|"3"|"4"];
+        setSelectedScenario(selectedSc);
+        setCliHistory(prev => [...prev, `  [ACTION] Running ${SCENARIOS[selectedSc].name}...`, ""]);
+        
+        // Trigger telemetry injection
+        setTimeout(() => {
+          handleInjectTelemetry();
+        }, 100);
+        break;
+      }
+      case "audit": {
+        const total = assets.length;
+        const clean = assets.filter((a: any) => a.Status === "ACTIVE" && !isUnreachable(a)).length;
+        const isolated = assets.filter((a: any) => a.Status === "ISOLATED").length;
+        const silent = assets.filter((a: any) => isUnreachable(a)).length;
+        const critical = alerts.filter((al: any) => al.RiskLevel === "CRITICAL").length;
+
+        setCliHistory(prev => [
+          ...prev,
+          "ISOLATION COMPLIANCE STATUS SUMMARY:",
+          `  TOTAL REGISTRATION NODE COUNT : ${total}`,
+          `  CLEAN COMPLIANT FLEET SIZE    : ${clean}`,
+          `  ACTIVE SECURITY THREATS       : ${critical}`,
+          `  ISOLATED NEUTRALIZED AGENTS    : ${isolated}`,
+          `  SILENT OR UNREACHABLE ASSETS  : ${silent}`,
+          ""
+        ]);
+        break;
+      }
+      case "mute":
+        setIsMuted(true);
+        audio.setMuted(true);
+        setCliHistory(prev => [...prev, "  [AUDIO] Audio muted.", ""]);
+        break;
+      case "unmute":
+        setIsMuted(false);
+        audio.setMuted(false);
+        audio.playClick();
+        setCliHistory(prev => [...prev, "  [AUDIO] Audio activated.", ""]);
+        break;
+      default:
+        setCliHistory(prev => [
+          ...prev,
+          `  ERROR: Command '${cmd}' unrecognized. Type 'help' to review supported operational verbs.`,
+          ""
+        ]);
+        break;
+    }
+  };
+
   const handleBulkIsolate = async () => {
     if (selectedAssetIds.size === 0) return;
     setBulkIsolating(true);
-    setBulkResult(null);
     try {
       const ids = Array.from(selectedAssetIds);
-      const result = await bulkIsolateAssets(activeTenantId, ids);
-      setBulkResult(
-        `BULK_ISOLATION COMPLETE — Succeeded: ${result.succeeded.length}, Already isolated: ${result.alreadyIsolated.length}, Failed: ${result.failed.length}`
-      );
+      await bulkIsolateAssets(activeTenantId, ids);
       setSelectedAssetIds(new Set());
       setSelectionMode(false);
       mutate('dashboardData');
     } catch (err: any) {
-      setBulkResult(`BULK_ISOLATION FAILED — ${err.message}`);
+      console.error("Bulk isolation failed:", err);
     } finally {
       setBulkIsolating(false);
     }
@@ -338,6 +522,20 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
               <Download className="w-3 h-3" />
               EXPORT CSV
             </a>
+            <button
+              onClick={() => {
+                const nextMute = !isMuted;
+                setIsMuted(nextMute);
+                audio.setMuted(nextMute);
+                if (!nextMute) {
+                  audio.playClick();
+                }
+              }}
+              className="font-mono text-[9px] border border-zinc-850 bg-[#0a0a0a]/70 px-2 py-0.5 text-zinc-500 hover:text-white cursor-pointer hover:border-zinc-700 transition-colors uppercase tracking-wider"
+            >
+              {isMuted ? "🔊 AUDIO OFF" : "🔊 AUDIO ON"}
+            </button>
+            <div className="w-px h-4 bg-zinc-850 mx-1" />
             <div className="flex items-center gap-2">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-none shadow-[0_0_4px_#22c55e]" />
               <span className="font-mono text-xs text-green-500">SYS_ONLINE</span>
@@ -374,7 +572,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
               <span className="w-1 h-1 bg-red-500 rounded-none"></span>
               <span>ESTIMATED SHADOW AI BREACH COST PREVENTED: $670K</span>
               <span className="w-1 h-1 bg-red-500 rounded-none"></span>
-              <span className="text-amber-400 font-bold">EU AI ACT TIER 2 ENFORCEMENT COUNTDOWN: {Math.max(0, Math.ceil((new Date('2026-08-02').getTime() - Date.now()) / 86400000))} DAYS</span>
+              <span className="text-amber-400 font-bold">EU AI ACT TIER 2 ENFORCEMENT COUNTDOWN: {Math.max(0, Math.ceil((new Date('2026-08-02').getTime() - now) / 86400000))} DAYS</span>
               <span className="w-1 h-1 bg-red-500 rounded-none"></span>
               <span className="text-green-500 font-bold">SOC 2 AUDIT EXPORT STATUS: READIED</span>
               <span className="w-1 h-1 bg-red-500 rounded-none"></span>
@@ -444,10 +642,12 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           
-          {/* Main Feed: Alerts */}
-          <div className="lg:col-span-3">
-            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[600px]">
-              <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+          {/* Main Feed: Alerts + CLI Terminal */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
+            
+            {/* Security Incident Feed */}
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[410px]">
+              <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                 <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />
                   Security Incident Feed
@@ -539,6 +739,41 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                 )}
               </div>
             </div>
+
+            {/* CLI Cockpit Terminal Console */}
+            <div className="bg-[#09090b] border border-zinc-800 h-[176px] flex flex-col justify-between overflow-hidden">
+              <div className="px-4 py-1.5 border-b border-zinc-800 bg-zinc-900/30 flex justify-between items-center text-[9px] font-mono text-zinc-500 select-none">
+                <span className="flex items-center gap-1.5"><TerminalSquare className="w-3.5 h-3.5 text-blue-500" /> COCKPIT OPERATIONAL CONSOLE</span>
+                <span>ADM@LIFECYCLEZERO:~</span>
+              </div>
+              
+              {/* Output log */}
+              <div className="flex-1 overflow-y-auto p-3 font-mono text-[9px] text-[#00FF41] bg-[#050505]/95 custom-scrollbar space-y-1 select-text relative">
+                {/* Scanline overlay */}
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.15)_50%)] bg-[length:100%_4px] opacity-10"></div>
+                {cliHistory.map((line, idx) => (
+                  <div key={idx} className="whitespace-pre-wrap leading-relaxed">{line}</div>
+                ))}
+                <div ref={cliEndRef} />
+              </div>
+
+              {/* Form Input */}
+              <form onSubmit={handleCliSubmit} className="border-t border-zinc-800 bg-[#070708] flex items-center px-4 py-1.5">
+                <span className="font-mono text-[9px] text-blue-500 font-bold select-none mr-2">ADM@LIFECYCLEZERO:~$</span>
+                <input
+                  type="text"
+                  value={cliInput}
+                  onChange={(e) => setCliInput(e.target.value)}
+                  className="flex-1 bg-transparent text-[#00FF41] font-mono text-xs focus:outline-none placeholder-zinc-800"
+                  placeholder="Type 'help' to see active command catalog..."
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                />
+              </form>
+            </div>
+
           </div>
 
           {/* Sidebar: Fleet Heatmap & Simulation Console */}
@@ -631,7 +866,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                           else if (isSilent) bgColor = 'bg-amber-500 hover:bg-amber-400';
 
                           const lastSeenText = asset.LastHeartbeat 
-                            ? `${Math.floor((Date.now() - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
+                            ? `${Math.floor((now - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
                             : "Never";
 
                           const isSelected = selectedAssetIds.has(asset.AssetId);
@@ -876,7 +1111,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
                   label="LAST_HEARTBEAT" 
                   value={
                     selectedAsset.LastHeartbeat 
-                      ? `${new Date(selectedAsset.LastHeartbeat).toLocaleString()} (${Math.floor((Date.now() - new Date(selectedAsset.LastHeartbeat).getTime()) / 60000)}m ago)`
+                      ? `${new Date(selectedAsset.LastHeartbeat).toLocaleString()} (${Math.floor((now - new Date(selectedAsset.LastHeartbeat).getTime()) / 60000)}m ago)`
                       : "Never Reported"
                   } 
                 />

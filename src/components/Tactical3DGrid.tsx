@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ShieldAlert } from "lucide-react";
 
 interface Tactical3DGridProps {
   assets: any[];
@@ -30,6 +29,14 @@ export default function Tactical3DGrid({
   const dragStart = useRef({ x: 0, y: 0 });
   const dragRotation = useRef({ x: 55, z: -45 });
   const [autoRotate, setAutoRotate] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Slow auto-rotation when not interacting
   useEffect(() => {
@@ -179,7 +186,7 @@ export default function Tactical3DGrid({
             const isSelected = selectedAssetIds.has(asset.AssetId);
 
             const lastSeenText = asset.LastHeartbeat
-              ? `${Math.floor((Date.now() - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
+              ? `${Math.floor((now - new Date(asset.LastHeartbeat).getTime()) / 60000)}m ago`
               : "Never";
 
             return (

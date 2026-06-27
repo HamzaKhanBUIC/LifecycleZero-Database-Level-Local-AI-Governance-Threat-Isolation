@@ -1,8 +1,72 @@
 import { NextResponse } from 'next/server';
 import { getAssetById } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
-
 import { env } from '@/lib/env';
+import { evaluateTelemetryRisk } from '@/lib/ai';
+import { docClient } from '@/lib/dynamodb';
+import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+
+const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
+
+async function processTelemetryInline(payload: any) {
+  const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, timestamp } = payload;
+  
+  const baseTelemetry = {
+    PK: `TENANT#${tenantId}`,
+    SK: `TELEMETRY#${assetId}#${timestamp}`,
+    AssetId: assetId,
+    Timestamp: timestamp,
+    ProcessName: processName,
+    FilesAccessed: filesAccessed,
+    CpuUsage: cpuUsage,
+    RamUsage: ramUsage,
+    NetworkEgress: networkEgress,
+    GSI1PK: `ASSET#${assetId}`,
+    GSI1SK: `DATE#${timestamp}`,
+  };
+
+  try {
+    // Evaluate risk level via Bedrock / Gemini fallback
+    const aiResult = await evaluateTelemetryRisk(baseTelemetry as any);
+
+    // 90 days TTL
+    const ttlEpoch = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60);
+
+    const telemetry: any = {
+      ...baseTelemetry,
+      RiskLevel: aiResult.riskLevel,
+      AiAnalysis: aiResult.reasoning,
+      TTL: ttlEpoch,
+    };
+
+    // Populate Sparse Index for Alerts
+    if (aiResult.riskLevel === "CRITICAL" || aiResult.riskLevel === "WARNING") {
+      telemetry.GSI2PK = `TENANT#${tenantId}#ALERT#${aiResult.riskLevel}`;
+      telemetry.GSI2SK = `DATE#${timestamp}`;
+    }
+
+    // Write directly to DynamoDB table
+    await docClient.send(new PutCommand({
+      TableName: TABLE_NAME,
+      Item: telemetry
+    }));
+
+    // Update Asset LastHeartbeat
+    await docClient.send(new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+      UpdateExpression: "SET LastHeartbeat = :ts",
+      ExpressionAttributeValues: {
+        ":ts": new Date().toISOString()
+      }
+    }));
+    
+    console.log(`[INLINE PROCESSING] Successfully processed telemetry alert for ${assetId}. Risk: ${aiResult.riskLevel}`);
+  } catch (err) {
+    console.error(`[INLINE PROCESSING ERROR] Failed to process telemetry for ${assetId}:`, err);
+  }
+}
+
 
 export async function POST(request: Request) {
   try {
@@ -53,7 +117,13 @@ export async function POST(request: Request) {
     // 4. Send to SQS (or local fallback file)
     const result = await sendToQueue(queuePayload);
 
-    // 5. Return 202 Accepted (Standard for high-throughput queues)
+    // 5. Instantly process telemetry inline to update the dashboard immediately for real-time visibility.
+    // This allows the threat simulations to work seamlessly even when a background worker daemon is not running (e.g., Serverless Vercel).
+    processTelemetryInline(queuePayload).catch((err) => {
+      console.error("Inline telemetry processing fallback failed:", err);
+    });
+
+    // 6. Return 202 Accepted (Standard for high-throughput queues)
     return NextResponse.json({
       success: true,
       status: "QUEUED",

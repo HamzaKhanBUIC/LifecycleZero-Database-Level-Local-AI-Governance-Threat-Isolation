@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ProcurementRequest } from "@/lib/types";
-import { createRequestAction, resolveRequestAction } from "@/app/actions/procurement";
+import { createRequestAction, resolveRequestAction } from "@/lib/api";
 
 interface ProcurementQueueViewProps {
   pendingRequests: ProcurementRequest[];

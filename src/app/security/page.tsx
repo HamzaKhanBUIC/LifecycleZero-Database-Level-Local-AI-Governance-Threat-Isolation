@@ -1,5 +1,5 @@
 import Dashboard from "../../components/Dashboard";
-import { getAssets, getCrossAssetAlerts } from "../actions/telemetry";
+import { getAssets, getCrossAssetAlerts } from "@/lib/api";
 
 export default async function SecurityPage() {
   const TENANT_ID = "org_demo_123";

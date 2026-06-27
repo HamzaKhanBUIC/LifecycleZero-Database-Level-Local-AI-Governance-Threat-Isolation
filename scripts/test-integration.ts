@@ -69,6 +69,7 @@ async function runTests() {
     console.log("\n4. Testing getActiveAssetsForEmployee (Access Pattern 1)...");
     const activeAssets = await getActiveAssetsForEmployee(testTenantId, "emp_test_user");
     const hasNewAsset = activeAssets.some(a => a.AssetId === resolution.assetId && a.Status === "PROCURING");
+    if (!hasNewAsset) throw new Error("Resolution failed: New asset is not found under employee in PROCURING state!");
     // Note: When approved, it starts in 'PROCURING' state. To make it 'ACTIVE', we update it.
     console.log(`✅ Assets currently assigned: ${activeAssets.length}`);
 
