@@ -1,6 +1,3 @@
-import * as dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
-
 import { 
   QueryCommand, 
   PutCommand, 
@@ -9,7 +6,7 @@ import {
   UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 import { docClient } from "./dynamodb";
-import type { Tenant, Employee, HardwareAsset, ProcurementRequest, AuditLog } from "./types.ts";
+import type { Tenant, Employee, HardwareAsset, ProcurementRequest, AuditLog } from "./types";
 
 import { env } from "./env";
 
@@ -275,6 +272,8 @@ export async function createHardwareAsset(tenantId: string, asset: Omit<Hardware
     GSI1PK: `EMP#${asset.EmployeeId || "UNASSIGNED"}`,
     GSI1SK: `STATE#${asset.Status}`,
     ...(gsi2pk ? { GSI2PK: gsi2pk, GSI2SK: gsi2sk } : {}),
+    AgentKey: asset.AgentKey || (typeof crypto !== "undefined" ? crypto.randomUUID() : `key_${Math.random().toString(36).substring(2, 10)}`),
+    HardwareUuid: asset.HardwareUuid || undefined,
     UpdatedAt: timestamp
   };
 
