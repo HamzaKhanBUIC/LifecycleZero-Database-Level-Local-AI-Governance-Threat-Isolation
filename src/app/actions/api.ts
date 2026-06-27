@@ -9,7 +9,8 @@ import {
   getAssetById, 
   updateAssetStatusTransaction, 
   submitProcurementRequest, 
-  resolveProcurementRequest 
+  resolveProcurementRequest,
+  createHardwareAsset
 } from "@/lib/dao";
 import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@/lib/types";
 
@@ -34,14 +35,17 @@ async function getActorName(): Promise<string> {
  */
 export async function getAssets(tenantId: string) {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
+  // Only override tenantId from auth context when Clerk is active (not in demo/skip mode)
   let activeTenantId = tenantId;
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      activeTenantId = context.tenantId;
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        activeTenantId = context.tenantId;
+      }
+    } catch {
+      console.warn("[getAssets] Fallback to client tenantId:", tenantId);
     }
-  } catch {
-    console.warn("[getAssets] Fallback to client tenantId:", tenantId);
   }
 
   const command = new QueryCommand({
@@ -62,20 +66,23 @@ export async function getAssets(tenantId: string) {
  */
 export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
+  // Only override tenantId from auth context when Clerk is active (not in demo/skip mode)
   let activeTenantId = tenantId;
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      activeTenantId = context.tenantId;
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        activeTenantId = context.tenantId;
+      }
+    } catch {
+      console.warn("[getCrossAssetAlerts] Fallback to client tenantId:", tenantId);
     }
-  } catch {
-    console.warn("[getCrossAssetAlerts] Fallback to client tenantId:", tenantId);
   }
 
   const queryAlerts = async (riskLevel: string) => {
     const command = new QueryCommand({
       TableName: TABLE_NAME,
-      IndexName: "GSI2",
+      IndexName: "GSI2-SparseWorkflow",
       KeyConditionExpression: "GSI2PK = :gsi2pk",
       ExpressionAttributeValues: {
         ":gsi2pk": `TENANT#${activeTenantId}#ALERT#${riskLevel}`,
@@ -99,15 +106,20 @@ export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
 export async function isolateAsset(tenantId: string, assetId: string, reason?: string) {
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  const actorName = "Security Administrator";
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      activeTenantId = context.tenantId;
-      actorId = context.userId || actorId;
+  let actorName = await getActorName();
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        activeTenantId = context.tenantId;
+        actorId = context.userId || actorId;
+      }
+    } catch {
+      console.warn("[isolateAsset] Fallback to client tenantId:", tenantId);
     }
-  } catch {
-    console.warn("[isolateAsset] Fallback to client tenantId:", tenantId);
+  } else {
+    // In demo mode, get actorId from mock context
+    actorId = "user_mock_admin";
   }
 
   const asset = await getAssetById(activeTenantId, assetId);
@@ -148,15 +160,19 @@ export async function isolateAsset(tenantId: string, assetId: string, reason?: s
 export async function restoreAsset(tenantId: string, assetId: string) {
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  const actorName = "Security Administrator";
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      activeTenantId = context.tenantId;
-      actorId = context.userId || actorId;
+  let actorName = await getActorName();
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        activeTenantId = context.tenantId;
+        actorId = context.userId || actorId;
+      }
+    } catch {
+      console.warn("[restoreAsset] Fallback to client tenantId:", tenantId);
     }
-  } catch {
-    console.warn("[restoreAsset] Fallback to client tenantId:", tenantId);
+  } else {
+    actorId = "user_mock_admin";
   }
 
   const asset = await getAssetById(activeTenantId, assetId);
@@ -210,14 +226,18 @@ export async function bulkIsolateAssets(
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
   const actorName = "Security Administrator";
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      activeTenantId = context.tenantId;
-      actorId = context.userId || actorId;
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        activeTenantId = context.tenantId;
+        actorId = context.userId || actorId;
+      }
+    } catch {
+      console.warn("[bulkIsolateAssets] Fallback to client tenantId:", tenantId);
     }
-  } catch {
-    console.warn("[bulkIsolateAssets] Fallback to client tenantId:", tenantId);
+  } else {
+    actorId = "user_mock_admin";
   }
 
   const results = await Promise.allSettled(
@@ -396,10 +416,19 @@ export async function resolveRequestAction(requestId: string, decision: 'APPROVE
 /**
  * Seed sample data for active tenant sandbox
  */
-export async function seedActiveTenantAction() {
+export async function seedActiveTenantAction(tenantIdOverride?: string) {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
   try {
-    const { tenantId } = await getTenantContext();
+    let tenantId = tenantIdOverride;
+    if (!tenantId) {
+      const context = await getTenantContext();
+      tenantId = context.tenantId;
+    }
+
+    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+    if (!allowedSandboxTenants.includes(tenantId)) {
+      throw new Error("Sandbox seeding/resetting is restricted to sandbox demo tenants only.");
+    }
     const timestamp = new Date().toISOString();
 
     console.log(`🌱 Seeding active tenant: ${tenantId}`);
@@ -576,3 +605,44 @@ export async function seedActiveTenantAction() {
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Register a new hardware asset manually
+ */
+export async function registerAssetAction(data: {
+  assetId: string;
+  assetName: string;
+  type: HardwareAsset['Type'];
+  serialNo: string;
+  status: HardwareAsset['Status'];
+  employeeId?: string;
+  employeeName?: string;
+}) {
+  try {
+    const { tenantId } = await getTenantContext();
+    
+    // Check if asset already exists
+    const existing = await getAssetById(tenantId, data.assetId);
+    if (existing) {
+      return { success: false, error: "Asset ID already exists." };
+    }
+
+    await createHardwareAsset(tenantId, {
+      AssetId: data.assetId,
+      AssetName: data.assetName,
+      SerialNo: data.serialNo || `SN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+      Type: data.type,
+      Status: data.status || "ACTIVE",
+      EmployeeId: data.employeeId || "UNASSIGNED",
+      EmployeeName: data.employeeName || "Open Stock"
+    });
+
+    revalidatePath('/dashboard/assets');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ registerAssetAction Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
