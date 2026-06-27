@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield } from "lucide-react";
+import { UserButton } from "@clerk/nextjs";
+import { getTenantContext } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({
   children,
@@ -9,12 +13,14 @@ export default async function DashboardLayout({
 }) {
   const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
   let userId: string | null = "user_mock_admin";
+  let tenantId = "org_demo_123";
 
-  // Only call Clerk auth when Clerk is active and a valid key exists
-  if (!skipClerk && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.startsWith("pk_")) {
-    const { auth } = await import("@clerk/nextjs/server");
-    const authResult = await auth();
-    userId = authResult.userId || null;
+  try {
+    const context = await getTenantContext();
+    tenantId = context.tenantId;
+    userId = context.userId || (skipClerk ? "user_mock_admin" : null);
+  } catch (err) {
+    console.warn("Failed to retrieve tenant context in layout:", err);
   }
 
   if (!userId) {
@@ -36,7 +42,7 @@ export default async function DashboardLayout({
         <div className="mb-6 pb-6 border-b border-zinc-900">
           <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
           <div className="w-full bg-[#0a0a0a] border border-zinc-900 text-zinc-400 px-3 py-2 rounded font-mono text-xs flex justify-between items-center">
-            <span>org_demo_123</span>
+            <span>{tenantId}</span>
             <span className="text-[10px] text-green-500 font-semibold">[LIVE]</span>
           </div>
         </div>
@@ -78,15 +84,33 @@ export default async function DashboardLayout({
 
         {/* User profile section */}
         <div className="pt-6 border-t border-zinc-900 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded bg-[#0a0a0a] border border-zinc-800 flex items-center justify-center text-[10px] font-mono text-zinc-400">
-              ADM
+          {!skipClerk ? (
+            <div className="flex items-center gap-3 w-full">
+              <div className="w-8 h-8 shrink-0 flex items-center justify-center">
+                <UserButton afterSignOutUrl="/" appearance={{
+                  variables: {
+                    colorPrimary: '#ffffff',
+                    colorBackground: '#050505',
+                    colorText: '#ffffff'
+                  }
+                }} />
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <p className="text-xs font-bold text-zinc-200 truncate">Active User</p>
+                <p className="text-[10px] text-zinc-500 font-semibold uppercase">Enterprise B2B</p>
+              </div>
             </div>
-            <div className="text-left">
-              <p className="text-xs font-bold text-zinc-200">Management Panel</p>
-              <p className="text-[10px] text-zinc-500 font-semibold">B2B Admin Role</p>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded bg-[#0a0a0a] border border-zinc-800 flex items-center justify-center text-[10px] font-mono text-zinc-400">
+                ADM
+              </div>
+              <div className="text-left">
+                <p className="text-xs font-bold text-zinc-200">Management Panel</p>
+                <p className="text-[10px] text-zinc-500 font-semibold">B2B Admin Role</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </aside>
 
