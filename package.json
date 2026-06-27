@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "cross-env DB_LOCAL=true NEXT_PUBLIC_SKIP_CLERK=true next dev",
+    "dev": "cross-env DB_LOCAL=true next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
