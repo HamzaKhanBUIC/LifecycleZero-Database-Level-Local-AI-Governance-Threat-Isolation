@@ -2,15 +2,20 @@ import Dashboard from "../../components/Dashboard";
 import { getAssets, getCrossAssetAlerts } from "@/lib/api";
 import { getTenantContext } from "@/lib/auth";
 
-export default async function SecurityPage() {
+export default async function SecurityPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
+  const resolvedParams = await searchParams;
+  const isDemoMode = resolvedParams.demo === "true";
+  
   let tenantId = "org_demo_123";
-  try {
-    const context = await getTenantContext();
-    if (context.tenantId) {
-      tenantId = context.tenantId;
+  if (!isDemoMode) {
+    try {
+      const context = await getTenantContext();
+      if (context.tenantId) {
+        tenantId = context.tenantId;
+      }
+    } catch (err) {
+      console.warn("Failed to get tenant context, falling back to org_demo_123:", err);
     }
-  } catch (err) {
-    console.warn("Failed to get tenant context, falling back to org_demo_123:", err);
   }
   
   // Pre-fetch data on the server for instant page load and zero client-side layout shift
@@ -29,7 +34,7 @@ export default async function SecurityPage() {
 
   return (
     <main className="min-h-screen bg-[#09090b]">
-      <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} tenantId={tenantId} />
+      <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} tenantId={tenantId} isForcedDemo={isDemoMode} />
     </main>
   );
 }
