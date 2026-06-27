@@ -149,13 +149,19 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
 
   const handleInitializeGrid = async () => {
     setInitializingGrid(true);
-    const res = await seedActiveTenantAction();
-    if (res.success) {
-      mutate(['dashboardData', activeTenantId]);
-    } else {
-      alert("Failed to initialize database: " + res.error);
+    try {
+      const res = await seedActiveTenantAction();
+      if (res.success) {
+        mutate(['dashboardData', activeTenantId]);
+      } else {
+        alert("Failed to initialize database: " + res.error);
+      }
+    } catch (err: any) {
+      console.error("Initialization error:", err);
+      alert("Failed to initialize database: " + (err.message || err));
+    } finally {
+      setInitializingGrid(false);
     }
-    setInitializingGrid(false);
   };
 
   // Audio and CLI states

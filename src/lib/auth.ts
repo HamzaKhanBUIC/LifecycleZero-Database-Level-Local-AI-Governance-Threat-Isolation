@@ -20,6 +20,12 @@ export async function getTenantContext() {
   const { orgId, userId } = await auth();
 
   if (!orgId) {
+    if (userId) {
+      return {
+        tenantId: `USER_${userId}`,
+        userId: userId
+      };
+    }
     throw new Error("Unauthorized: No organization selected.");
   }
 
