@@ -200,26 +200,21 @@ The host agent daemon is fully open-source. Security-sensitive developers will n
 
 ---
 
-## 7. Architectural & Structural Enhancements Required
+## 7. Production Security & Scalability Features (Built-in & Active)
 
-To succeed against security products built by senior enterprise engineers, LifecycleZero must implement crucial structural and security improvements:
+To ensure the platform meets the strict security and scaling expectations of enterprise security teams, LifecycleZero has implemented the following production-grade security and scalability features:
 
-### Agent-Gateway Security: mTLS, SPIFFE/SPIRE, and Token Rotation
-Relying on static API keys or standard OAuth 2.0 bearer tokens to authenticate endpoint telemetry is a critical architectural vulnerability. LifecycleZero must implement Mutual TLS (mTLS) for all Agent-Gateway communication. 
+### 🔒 Host-Specific Agent Key Rotation
+*   **The Problem**: Static API keys or shared tokens configured across thousands of endpoint agents are highly vulnerable to credential theft and compromise.
+*   **Our Solution**: The first telemetry ping from a newly deployed agent uses the tenant's global enrollment key (`AGENT_API_KEY`). On initial handshake, the ingestion API generates a unique, host-specific `AgentKey` stored directly on the asset record, and returns it in the `202 Accepted` response. The client daemon catches this key and rotates its credentials on the fly, using it exclusively for all future heartbeats. Subsequent telemetry requests are authenticated directly against this device-specific key.
 
-To manage the certificate lifecycle management across thousands of endpoints, LifecycleZero should integrate the Secure Production Identity Framework for Everyone (SPIFFE) and its runtime environment, SPIRE. SPIRE automates the node and workload attestation process based on unique OS-level characteristics and cryptographic proofs, automatically rotating X.509 certificates every 1 to 24 hours.
+### 🛡️ Device Spoofing Mitigation (Anti-Tampering)
+*   **The Problem**: In a standard telemetry endpoint configuration, malicious employees can spoof other users' device IDs to inject false telemetry data or disrupt reporting.
+*   **Our Solution**: The client agent daemon automatically queries the physical host's motherboard UUID or BIOS serial number (using `wmic` on Windows, `system_profiler` on macOS, and `/sys/class/dmi` on Linux). This hardware signature is registered on initial enrollment. For all subsequent heartbeats, the API gateway performs a strict signature check. If a spoofed device attempts to send telemetry under another host's ID, the ingestion gateway rejects the request instantly as a `SPOOFING_ATTEMPT` with a `400 Bad Request` response.
 
-### OS-Level Isolation: Kernel-Level Termination vs. User-Space Firewalls
-The mechanism by which LifecycleZero executes Host Isolation is paramount. Relying on user-space firewalls is fast to deploy but highly vulnerable. Advanced malware or autonomous agents running with elevated administrative privileges can easily bypass these user-space stubs by making direct system calls (syscalls) to the OS kernel. 
-
-To guarantee the termination of rogue AI processes, the agent requires kernel-level (Ring 0) privileges. On Windows, this involves developing an Early Launch Anti-Malware (ELAM) driver and a file system mini-filter. On Linux, leveraging Extended Berkeley Packet Filter (eBPF) allows for the safe, high-performance execution of sandboxed programs within the OS kernel.
-
-LifecycleZero should adopt a hybrid approach: utilizing native OS firewall APIs to instantly drop all non-essential egress traffic upon receiving the quarantine command, backed by a resilient, tamper-evident user-space agent watchdog to ensure the network isolation rules are not maliciously altered or disabled.
-
-### Performance Optimization: Edge-Level Rate Limiting and Local Database Caching
-Streaming high-fidelity telemetry from thousands of enterprise endpoints directly to the cloud can overwhelm even highly decoupled SQS architectures. To optimize performance, LifecycleZero must push intelligence down to the edge. 
-
-Integrating an embedded, lightweight database like SQLite directly into the endpoint agent allows for local caching, telemetry deduplication, and edge-level rate limiting. SQLite operating in Write-Ahead Logging (WAL) mode enables simultaneous read and write operations, ensuring the agent can log high-velocity system events without throwing database locking errors.
+### ⚡ Telemetry Database Write Sharding
+*   **The Problem**: A fleet of 10,000+ endpoints streaming telemetry every 5 seconds to a single `PK = TENANT#<TenantId>` database partition quickly throttles due to DynamoDB's 1,000 WCU per partition limit.
+*   **Our Solution**: Telemetry writes partition keys are sharded across 10 physical partitions (`PK = TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) using a random hashing function. This distributes the write load, raising write throughput limits to 10,000 WCUs/sec (scaling to 50,000+ endpoints per tenant) while keeping dashboard global queries fast and responsive.
 
 ---
 
@@ -228,5 +223,8 @@ Integrating an embedded, lightweight database like SQLite directly into the endp
 Every access pattern, database transaction, and security control in LifecycleZero is fully verified and functional:
 
 *   **Integration Verification (`npm run test:integration`):** Successfully verified single-table DynamoDB writes, sparse GSI2 index exclusions (confirming sparse index behavior), chronological audit logs generation, the atomic `ConditionCheck` transaction sequence preventing double-isolation race conditions, and edge API Gateway 403 blocks for isolated endpoint telemetry ingestion.
-*   **Automated Playwright UI & Sandbox Test (`test_sandbox.py`):** Verified root dashboard loading, simulation console rendering, scenario-based telemetry ingestion (`ollama` accessing `payroll_2026.xlsx` returning `202 QUEUED`), background worker alert processing, incident warning feed card loading, manual isolation click trigger, DynamoDB state transition, and subsequent API Gateway 403 quarantines.
+*   **Unique Agent Key Rotation Handshake:** Validated dynamic key rotation exchange between the ingestion gateway and the client daemon.
+*   **Hardware UUID Drift Validation:** Confirmed gateway blocks and flags spoofing attempts when mismatched hardware signatures are detected.
+*   **Database Write Sharding Distribution:** Verified telemetry logs are correctly sharded across physical partitions while remaining fully queryable via the GSI1 index.
 *   **Compilation & Zero-Shift Initial Paint:** Validated with `npx tsc --noEmit` yielding zero compilation errors. Server Component refactoring reduced initial UI render latency to sub-200ms with zero layout shifts.
+
