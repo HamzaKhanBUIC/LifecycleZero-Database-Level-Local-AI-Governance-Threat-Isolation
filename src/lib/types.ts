@@ -35,6 +35,8 @@ export interface HardwareAsset {
   GSI2PK?: string; // TENANT#<TenantID>#ACTION_REQ (if applicable)
   GSI2SK?: string; // DATE#<Timestamp>
   LastHeartbeat?: string;
+  AgentKey?: string; // Unique telemetry ingest key
+  HardwareUuid?: string; // Hardware-locked motherboard UUID / BIOS serial
   UpdatedAt: string;
 }
 
