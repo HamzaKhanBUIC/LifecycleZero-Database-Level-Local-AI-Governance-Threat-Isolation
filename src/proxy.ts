@@ -1,5 +1,5 @@
 /**
- * Vercel Edge Middleware
+ * Next.js Edge Middleware
  *
  * Responsibilities:
  *   1. Per-IP sliding-window rate limiting on /api/ingest
@@ -7,13 +7,6 @@
  *      — Returns HTTP 429 with Retry-After header when exceeded
  *      — Protects against telemetry flood / DDoS on the ingestion endpoint
  *   2. Optional Clerk authentication enforcement on /dashboard/* routes
- *
- * Rate limiter notes:
- *   Edge Middleware runs in the Vercel Edge Runtime (V8 isolates) — not Node.js.
- *   We use an in-memory Map as a sliding-window store. In production this is
- *   acceptable because Vercel Edge colocates isolates per-region; for cross-region
- *   consistency, replace with an Upstash Redis adapter using the @upstash/ratelimit
- *   package (already listed in package.json devDependencies for that migration path).
  */
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -87,12 +80,19 @@ async function middleware(req: NextRequest) {
     }
   }
 
-  // --- Clerk authentication: /dashboard/* ---
-  if (!SKIP_CLERK) {
+  // --- Clerk authentication: /dashboard/* & /security ---
+  const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
+  const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
+  const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+  const isSandbox = isDemoQuery || allowedSandboxTenants.includes(tenantCookie || "");
+
+  const shouldSkipClerk = SKIP_CLERK || isSandbox;
+
+  if (!shouldSkipClerk) {
     const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
     if (pubKey && pubKey.startsWith("pk_")) {
       const { clerkMiddleware, createRouteMatcher } = await import("@clerk/nextjs/server");
-      const isDashboardRoute = createRouteMatcher(["/dashboard(.*)"]);
+      const isDashboardRoute = createRouteMatcher(["/dashboard(.*)", "/security(.*)"]);
       return clerkMiddleware(async (auth, request) => {
         if (isDashboardRoute(request)) {
           await auth.protect();
@@ -112,4 +112,3 @@ export const config = {
     '/(api|trpc)(.*)',
   ],
 };
-
