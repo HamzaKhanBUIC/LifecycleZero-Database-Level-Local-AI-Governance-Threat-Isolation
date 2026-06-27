@@ -23,6 +23,7 @@ export default function Sparkline({ assetId, status, hasCriticalAlert = false }:
 
     const isIsolated = status === "ISOLATED";
     const isUnreachable = status === "UNREACHABLE" || status === "MAINTENANCE";
+    const isOffline = status === "PROCURING" || status === "IN_TRANSIT" || status === "RETIRED";
 
     // Set canvas size
     const width = 100;
@@ -39,6 +40,9 @@ export default function Sparkline({ assetId, status, hasCriticalAlert = false }:
       if (isIsolated) {
         // Completely flat at zero
         val = height - 2;
+      } else if (isOffline) {
+        // Flat gray line at center (no live telemetry yet/anymore)
+        val = height / 2;
       } else if (hasCriticalAlert) {
         // High frequency spike (critical CPU/RAM)
         val = 2 + Math.random() * 16;
@@ -63,6 +67,8 @@ export default function Sparkline({ assetId, status, hasCriticalAlert = false }:
       
       if (isIsolated) {
         ctx.strokeStyle = "#f43f5e"; // Rose-500 flat
+      } else if (isOffline) {
+        ctx.strokeStyle = "#3f3f46"; // Zinc-700 flat/offline
       } else if (hasCriticalAlert) {
         ctx.strokeStyle = "#ef4444"; // Red-500 spikes
       } else if (isUnreachable) {
@@ -86,7 +92,7 @@ export default function Sparkline({ assetId, status, hasCriticalAlert = false }:
       ctx.stroke();
 
       // If active, draw gradient fill below path
-      if (!isIsolated && !isUnreachable) {
+      if (!isIsolated && !isUnreachable && !isOffline) {
         ctx.lineTo(width, height);
         ctx.lineTo(0, height);
         ctx.closePath();
