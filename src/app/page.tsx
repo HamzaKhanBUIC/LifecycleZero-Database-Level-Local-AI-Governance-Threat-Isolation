@@ -30,7 +30,11 @@ export default function WelcomePage() {
   const [showStats, setShowStats] = useState(false);
   
   // Audio state
-  const [isMuted, setIsMuted] = useState(() => audio.isMuted());
+  const [isMuted, setIsMuted] = useState(true);
+
+  useEffect(() => {
+    setIsMuted(audio.isMuted());
+  }, []);
 
   // Diagnostic Logs state
   const [logIndex, setLogIndex] = useState(0);

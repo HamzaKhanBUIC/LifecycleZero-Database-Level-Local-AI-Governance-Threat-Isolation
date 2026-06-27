@@ -146,7 +146,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [error, setError] = useState<string | null>(null);
 
   // Audio and CLI states
-  const [isMuted, setIsMuted] = useState(() => audio.isMuted());
+  const [isMuted, setIsMuted] = useState(true);
   const [cliInput, setCliInput] = useState("");
   const [cliHistory, setCliHistory] = useState<string[]>([
     "LIFECYCLEZERO SECURITY INTERACTIVE COMMAND LINE v9.0.0",
@@ -155,9 +155,11 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   ]);
   const cliEndRef = useRef<HTMLDivElement>(null);
 
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(1782531600000);
 
   useEffect(() => {
+    setIsMuted(audio.isMuted());
+    setNow(Date.now());
     const timer = setInterval(() => {
       setNow(Date.now());
     }, 10000);

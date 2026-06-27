@@ -27,10 +27,10 @@ export async function getActiveAssetsForEmployee(tenantId: string, employeeId: s
   const command = new QueryCommand({
     TableName: TABLE_NAME,
     IndexName: "GSI1-OverloadIndex",
-    KeyConditionExpression: "GSI1PK = :gsi1pk AND GSI1SK = :gsi1sk",
+    KeyConditionExpression: "GSI1PK = :gsi1pk AND begins_with(GSI1SK, :statePrefix)",
     ExpressionAttributeValues: {
       ":gsi1pk": `EMP#${employeeId}`,
-      ":gsi1sk": "STATE#ACTIVE"
+      ":statePrefix": "STATE#"
     }
   });
 
