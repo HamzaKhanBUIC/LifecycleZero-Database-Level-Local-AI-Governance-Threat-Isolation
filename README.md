@@ -59,6 +59,9 @@ AWS Database Architects and Solution Architects will appreciate the implementati
 
 * **Single-Table DynamoDB Schema:** Enforces multi-tenant isolation at the Partition Key level (`PK = TENANT#<TenantId>`). Tenant A can never query or accidentally scan Tenant B's data.
 * **Sparse Indexing (GSI2):** Only critical or warning telemetry events write to `GSI2PK`. This enables the SOC dashboard to fetch live alerts in milliseconds without performing expensive and slow table scans.
+* **Telemetry Write Sharding [NEW]:** Distributes raw telemetry writes across 10 physical partitions (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) to bypass Partition WCU thresholds.
+* **Host-Specific Key Rotation [NEW]:** Heartbeats are secured using device-specific agent keys generated dynamically on first handshake.
+* **Anti-Spoofing Verification [NEW]:** Gateway verifies hardware UUID signatures to prevent endpoint spoofing.
 * **Operational Data Purging (TTL):** Telemetry records are tagged with an expiration epoch (90 days). DynamoDB automatically purges them, preventing storage bloat.
 * **ACID Transactions (TransactWriteCommand):** Isolation commands atomically update the asset's status to `ISOLATED` and insert an immutable `AUDIT` log entry. The operation is fully atomic; it either completely succeeds or rolls back. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
 * **Endpoint Ingestion Block:** The Ingestion API enforces network quarantine. If a laptop's asset record is `ISOLATED`, the API immediately rejects its telemetry with `403 Forbidden` (`FORBIDDEN_ISOLATED`).
@@ -69,6 +72,7 @@ AWS Database Architects and Solution Architects will appreciate the implementati
 
 ## Enterprise Deployment and Commercial Model
 
+* **Master Playbook & Architecture Guide:** For a deep dive into schemas and configurations, review our **[Enterprise Architecture Playbook](docs/ARCHITECTURE_PLAYBOOK.md)**.
 * **Deployment Model:** LifecycleZero deploys as a lightweight, read-only system daemon pushed silently to macOS, Windows, and Linux endpoints via Mobile Device Management (MDM) tools (e.g., Jamf, Microsoft Intune, Kandji). No end-user interaction or local installation prompts are required.
 * **Onboarding Friction:** Zero. Once the MDM pushes the daemon, it automatically completes a secure handshake with the tenant's API gateway using a pre-configured hardware enrollment token, auto-provisioning its record in DynamoDB.
 * **Pricing Model:** Standard B2B SaaS subscription starting at $8 per monitored endpoint per month. An Enterprise tier offers dedicated AWS Bedrock endpoints, custom security heuristic rules, and historical CSV audit logging.
