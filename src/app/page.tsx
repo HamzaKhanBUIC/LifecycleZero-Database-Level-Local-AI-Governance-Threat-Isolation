@@ -75,17 +75,18 @@ export default function WelcomePage() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleLogs]);
 
-  // Handle auto-redirect after 7.5 seconds (giving enough time to read logs and click button)
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      router.push("/security");
-    }, 7800);
-    return () => clearTimeout(timeout);
-  }, [router]);
 
-  const handleTerminalButton = () => {
+
+  const handlePortalButton = () => {
     if (!isMuted) audio.playClick();
+    document.cookie = "lifecycle_tenant_id=org_real_impl; path=/;";
     router.push("/security");
+  };
+
+  const handleSandboxButton = () => {
+    if (!isMuted) audio.playClick();
+    document.cookie = "lifecycle_tenant_id=org_demo_123; path=/;";
+    router.push("/security?demo=true");
   };
 
   const toggleMute = () => {
@@ -161,14 +162,21 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          {/* Action Button */}
-          <div className={`transition-all duration-1000 delay-500 ${showStats ? 'opacity-100' : 'opacity-0'}`}>
+          {/* Action Buttons */}
+          <div className={`flex flex-col sm:flex-row gap-4 w-full max-w-lg transition-all duration-1000 delay-500 ${showStats ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             <button 
-              onClick={handleTerminalButton}
+              onClick={handlePortalButton}
               onMouseEnter={() => !isMuted && audio.playClick()}
-              className="px-8 py-3 bg-white text-black font-mono text-xs font-bold uppercase tracking-widest border border-white hover:bg-transparent hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer"
+              className="flex-1 px-5 py-3 border border-zinc-700 bg-transparent text-zinc-300 hover:text-white hover:border-white font-mono text-xs font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer text-center"
             >
-              &gt; INITIALIZE SOC TERMINAL
+              &gt; ENTERPRISE PORTAL
+            </button>
+            <button 
+              onClick={handleSandboxButton}
+              onMouseEnter={() => !isMuted && audio.playClick()}
+              className="flex-1 px-5 py-3 bg-white text-black font-mono text-xs font-bold uppercase tracking-widest border border-white hover:bg-zinc-200 transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer text-center animate-pulse"
+            >
+              &gt; LAUNCH SANDBOX DEMO
             </button>
           </div>
         </div>
