@@ -130,3 +130,22 @@ npm run agent
 ## SOC 2 Compliance Exports
 * **JSON Export:** `/api/export/audit` (Auditor-friendly nested events)
 * **CSV Export:** `/api/export/audit/csv` (Spreadsheet-ready compliance logs for upload into SIEMs)
+
+---
+
+## Hackathon Submission Details (H0 Hackathon)
+This project is submitted to the **H0 Hackathon (Track 2: Monetizable B2B App)**.
+
+* **AWS Database Used:** Amazon DynamoDB (Single-Table Design)
+* **Vercel Team ID:** `[INSERT_VERCEL_TEAM_ID_HERE]`
+* **Vercel Live URL:** `[INSERT_VERCEL_LIVE_URL_HERE]`
+* **Demonstration Video:** `[INSERT_YOUTUBE_LINK_HERE]`
+
+### Judging Access & Testing Instructions
+To test the deployed application:
+1. Navigate to the Vercel Live URL.
+2. Sign in using the following test credentials:
+   * **Email:** `judge_tester@lifecyclezero.com`
+   * **Password:** `H0Hackathon2026!`
+3. You will have full SOC Analyst access to view the fleet, trigger simulated threats, and isolate test endpoints.
+
