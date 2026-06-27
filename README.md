@@ -137,8 +137,8 @@ npm run agent
 This project is submitted to the **H0 Hackathon (Track 2: Monetizable B2B App)**.
 
 * **AWS Database Used:** Amazon DynamoDB (Single-Table Design)
-* **Vercel Team ID:** `[INSERT_VERCEL_TEAM_ID_HERE]`
-* **Vercel Live URL:** `[INSERT_VERCEL_LIVE_URL_HERE]`
+* **Vercel Team ID:** `hamza135252-2848s-projects`
+* **Vercel Live URL:** `https://lifecycle-zero.vercel.app/`
 * **Demonstration Video:** `[INSERT_YOUTUBE_LINK_HERE]`
 
 ### Judging Access & Testing Instructions
