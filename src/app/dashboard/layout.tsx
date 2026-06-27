@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert } from "lucide-react";
+import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield } from "lucide-react";
 
 export default async function DashboardLayout({
   children,
@@ -26,11 +26,7 @@ export default async function DashboardLayout({
       {/* Sidebar */}
       <aside className="w-64 border-r border-[#1f1f1f] bg-[#050505] flex flex-col p-6 shrink-0 select-none">
         <div className="flex items-center gap-3 mb-8">
-          <img 
-            src="/logo.jpg" 
-            alt="LifecycleZero Logo" 
-            className="h-8 w-8 rounded object-cover border border-zinc-800" 
-          />
+          <Shield className="h-6 w-6 text-white shrink-0" />
           <span className="font-bold text-base tracking-widest text-white uppercase">
             LifecycleZero
           </span>

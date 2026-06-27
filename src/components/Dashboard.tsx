@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
 // Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -144,6 +144,18 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
   const [modalReason, setModalReason] = useState("");
   const [reasonError, setReasonError] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initializingGrid, setInitializingGrid] = useState(false);
+
+  const handleInitializeGrid = async () => {
+    setInitializingGrid(true);
+    const res = await seedActiveTenantAction();
+    if (res.success) {
+      mutate(['dashboardData', activeTenantId]);
+    } else {
+      alert("Failed to initialize database: " + res.error);
+    }
+    setInitializingGrid(false);
+  };
 
   // Audio and CLI states
   const [isMuted, setIsMuted] = useState(true);
@@ -843,7 +855,20 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
               </div>
               
               <div className="flex-1 relative min-h-0">
-                {view3d ? (
+                {assets.length === 0 ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center font-mono space-y-3 z-10 bg-zinc-950/20">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed">
+                      [NO_ENDPOINTS_DETECTED_IN_GRID]
+                    </span>
+                    <button
+                      onClick={handleInitializeGrid}
+                      disabled={initializingGrid}
+                      className="px-4 py-2 border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-[10px] font-bold uppercase tracking-widest transition cursor-pointer select-none"
+                    >
+                      {initializingGrid ? "INITIALIZING..." : "INITIALIZE THREAT GRID"}
+                    </button>
+                  </div>
+                ) : view3d ? (
                   <Tactical3DGrid
                     assets={assets}
                     alerts={alerts}
