@@ -54,6 +54,7 @@ const fetchDashboardData = async (tenantId: string) => {
 interface DashboardProps {
   initialAssets: any[];
   initialAlerts: any[];
+  tenantId?: string;
 }
 
 const isUnreachable = (asset: any) => {
@@ -114,8 +115,8 @@ const SCENARIOS = {
   }
 };
 
-export default function Dashboard({ initialAssets, initialAlerts }: DashboardProps) {
-  const [activeTenantId, setActiveTenantId] = useState(DEFAULT_TENANT_ID);
+export default function Dashboard({ initialAssets, initialAlerts, tenantId }: DashboardProps) {
+  const [activeTenantId, setActiveTenantId] = useState(tenantId || DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
   const { data, isLoading } = useSWR(['dashboardData', activeTenantId], ([, tenantId]) => fetchDashboardData(tenantId as string), { 
@@ -239,8 +240,13 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
       return;
     }
 
-    appendLog(`[SIMULATION] Injecting telemetry for ${scenario.payload.assetId}...`, 0);
-    appendLog(`[POST /api/ingest] Payload: ${JSON.stringify(scenario.payload)}`, 600);
+    const payload = {
+      ...scenario.payload,
+      tenantId: activeTenantId
+    };
+
+    appendLog(`[SIMULATION] Injecting telemetry for ${payload.assetId}...`, 0);
+    appendLog(`[POST /api/ingest] Payload: ${JSON.stringify(payload)}`, 600);
 
     setTimeout(async () => {
       try {
@@ -250,7 +256,7 @@ export default function Dashboard({ initialAssets, initialAlerts }: DashboardPro
             "Content-Type": "application/json",
             "X-Agent-Key": "demo_agent_key_99"
           },
-          body: JSON.stringify(scenario.payload)
+          body: JSON.stringify(payload)
         });
         
         const resData = await res.json();

@@ -452,6 +452,36 @@ export async function seedActiveTenantAction() {
     const assets: HardwareAsset[] = [
       {
         PK: `TENANT#${tenantId}`,
+        SK: "ASSET#AST-M3PRO-001",
+        AssetId: "AST-M3PRO-001",
+        AssetName: "MacBook Pro 16\" M3 Pro",
+        SerialNo: "SN-C02F12345678",
+        Type: "LAPTOP",
+        Status: "ACTIVE",
+        EmployeeId: "emp_john",
+        EmployeeName: "John Doe",
+        GSI1PK: "EMP#emp_john",
+        GSI1SK: "STATE#ACTIVE",
+        LastHeartbeat: timestamp,
+        UpdatedAt: timestamp
+      },
+      {
+        PK: `TENANT#${tenantId}`,
+        SK: "ASSET#AST-M3AIR-003",
+        AssetId: "AST-M3AIR-003",
+        AssetName: "MacBook Air 13\" M3",
+        SerialNo: "SN-C02G87654321",
+        Type: "LAPTOP",
+        Status: "ACTIVE",
+        EmployeeId: "emp_sarah",
+        EmployeeName: "Sarah Connor",
+        GSI1PK: "EMP#emp_sarah",
+        GSI1SK: "STATE#ACTIVE",
+        LastHeartbeat: timestamp,
+        UpdatedAt: timestamp
+      },
+      {
+        PK: `TENANT#${tenantId}`,
         SK: "ASSET#AST-M3MAX-777",
         AssetId: "AST-M3MAX-777",
         AssetName: "MacBook Pro 16\" M3 Max",

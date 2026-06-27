@@ -1,16 +1,25 @@
 import Dashboard from "../../components/Dashboard";
 import { getAssets, getCrossAssetAlerts } from "@/lib/api";
+import { getTenantContext } from "@/lib/auth";
 
 export default async function SecurityPage() {
-  const TENANT_ID = "org_demo_123";
+  let tenantId = "org_demo_123";
+  try {
+    const context = await getTenantContext();
+    if (context.tenantId) {
+      tenantId = context.tenantId;
+    }
+  } catch (err) {
+    console.warn("Failed to get tenant context, falling back to org_demo_123:", err);
+  }
   
   // Pre-fetch data on the server for instant page load and zero client-side layout shift
   let initialAssets: any[] = [];
   let initialAlerts: any[] = [];
   try {
     const [assets, alerts] = await Promise.all([
-      getAssets(TENANT_ID),
-      getCrossAssetAlerts(TENANT_ID)
+      getAssets(tenantId),
+      getCrossAssetAlerts(tenantId)
     ]);
     initialAssets = assets;
     initialAlerts = alerts;
@@ -20,7 +29,7 @@ export default async function SecurityPage() {
 
   return (
     <main className="min-h-screen bg-[#09090b]">
-      <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} />
+      <Dashboard initialAssets={initialAssets} initialAlerts={initialAlerts} tenantId={tenantId} />
     </main>
   );
 }
