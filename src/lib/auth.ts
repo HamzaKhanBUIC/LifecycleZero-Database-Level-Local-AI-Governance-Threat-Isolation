@@ -1,8 +1,16 @@
+import { cookies } from "next/headers";
+
 export async function getTenantContext() {
-  // When Clerk is disabled, return mock context for demo tenant
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK === "true") {
+  const cookieStore = await cookies();
+  const tenantCookie = cookieStore.get("lifecycle_tenant_id")?.value;
+
+  const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+  const isSandbox = allowedSandboxTenants.includes(tenantCookie || "");
+
+  // When Clerk is bypassed globally OR the user is in the sandbox demo workspace, return mock context
+  if (process.env.NEXT_PUBLIC_SKIP_CLERK === "true" || isSandbox) {
     return {
-      tenantId: "org_demo_123",
+      tenantId: tenantCookie || "org_demo_123",
       userId: "user_mock_admin"
     };
   }
