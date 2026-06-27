@@ -94,6 +94,8 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
           Status: "ACTIVE",
           EmployeeId: newEmployeeId,
           EmployeeName: empName,
+          GSI1PK: `EMP#${newEmployeeId}`,
+          GSI1SK: `STATE#ACTIVE`,
           UpdatedAt: new Date().toISOString()
         };
         setAssets(prev => [newAsset, ...prev]);
