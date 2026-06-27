@@ -8,7 +8,8 @@ import {
   updateAssetStatusAction, 
   createRequestAction, 
   resolveRequestAction, 
-  seedActiveTenantAction 
+  seedActiveTenantAction,
+  registerAssetAction
 } from "@/app/actions/api";
 
 export { 
@@ -21,7 +22,8 @@ export {
   updateAssetStatusAction, 
   createRequestAction, 
   resolveRequestAction, 
-  seedActiveTenantAction 
+  seedActiveTenantAction,
+  registerAssetAction
 };
 
 /**
@@ -38,4 +40,5 @@ export class LifecycleZeroAPI {
   static createRequestAction = createRequestAction;
   static resolveRequestAction = resolveRequestAction;
   static seedActiveTenantAction = seedActiveTenantAction;
+  static registerAssetAction = registerAssetAction;
 }
