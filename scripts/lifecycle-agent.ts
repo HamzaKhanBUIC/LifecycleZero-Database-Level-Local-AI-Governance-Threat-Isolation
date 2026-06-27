@@ -35,6 +35,26 @@ function getCpuUsage(): Promise<number> {
   });
 }
 
+function getHardwareUuid(): string {
+  try {
+    const platform = os.platform();
+    if (platform === "win32") {
+      const output = execSync("wmic csproduct get uuid", { stdio: ["ignore", "pipe", "ignore"] }).toString();
+      const lines = output.split("\r\n").map(l => l.trim()).filter(l => l.length > 0 && l !== "UUID");
+      return lines[0] || "WIN-HW-MOCK-UUID";
+    } else if (platform === "darwin") {
+      const output = execSync("system_profiler SPHardwareDataType | awk '/Hardware UUID/ {print $3}'", { stdio: ["ignore", "pipe", "ignore"] }).toString();
+      return output.trim() || "MAC-HW-MOCK-UUID";
+    } else {
+      // Linux
+      const output = execSync("cat /sys/class/dmi/id/product_uuid", { stdio: ["ignore", "pipe", "ignore"] }).toString();
+      return output.trim() || "LINUX-HW-MOCK-UUID";
+    }
+  } catch (err) {
+    return `FALLBACK-HW-UUID-${os.hostname()}`;
+  }
+}
+
 function getLocalProcesses(): string[] {
   try {
     const platform = os.platform();
@@ -69,7 +89,11 @@ function getLocalProcesses(): string[] {
 }
 
 async function runAgent() {
+  const hardwareUuid = getHardwareUuid();
+  let activeAgentKey = AGENT_KEY;
+
   console.log(`🔒 LifecycleZero Endpoint Agent starting on host: ${os.hostname()}...`);
+  console.log(`📡 Hardware UUID: ${hardwareUuid}`);
   console.log(`📡 Targeting Ingest API: ${INGEST_URL}`);
   console.log(`🖥️ Reporting status for Asset: ${ASSET_ID} (Tenant: ${TENANT_ID})`);
 
@@ -114,6 +138,7 @@ async function runAgent() {
         cpuUsage: cpu,
         ramUsage: ram,
         networkEgress: networkEgress,
+        hardwareUuid: hardwareUuid,
       };
 
       // 4. Send telemetry POST to Next.js server
@@ -121,7 +146,7 @@ async function runAgent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Agent-Key": AGENT_KEY,
+          "X-Agent-Key": activeAgentKey,
         },
         body: JSON.stringify(payload),
       });
@@ -132,6 +157,12 @@ async function runAgent() {
         console.log(
           `[INGEST SUCCESS] Process: ${payload.processName} | CPU: ${payload.cpuUsage}% | RAM: ${payload.ramUsage}GB | Network: ${payload.networkEgress}MB | QueueStatus: ${data.status} | MsgId: ${data.messageId}`
         );
+
+        // Handshake: If server returns a device-specific rotated key, store it for future heartbeats
+        if (data.agentKey && data.agentKey !== activeAgentKey) {
+          console.log(`🔑 [CREDENTIAL ROTATION] Server issued unique device-specific agent key: ${data.agentKey}`);
+          activeAgentKey = data.agentKey;
+        }
       } else if (response.status === 403 && data.error === "FORBIDDEN_ISOLATED") {
         console.error(`❌ HOST ISOLATION ENFORCED: Ingestion API blocked this machine. Network egress restricted.`);
         console.error(`Reason: ${data.message}`);
