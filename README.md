@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.jpg" alt="LifecycleZero Logo" width="200" height="200" />
+</p>
+
 # LifecycleZero: Database-Level Local AI Governance & Threat Isolation
 
 LifecycleZero is an enterprise-grade security platform that frames local AI governance as a database-level security infrastructure problem.
