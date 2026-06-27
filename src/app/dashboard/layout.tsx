@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert } from "lucide-react";
 
 export default async function DashboardLayout({
   children,
@@ -21,67 +22,73 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-black text-zinc-100 font-sans">
+    <div className="flex min-h-screen bg-black text-zinc-100 font-mono">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-[#262626] bg-[#050505] flex flex-col p-6 shrink-0">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="h-8 w-8 rounded bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-sm">
-            ⚡
-          </div>
-          <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+      <aside className="w-64 border-r border-[#1f1f1f] bg-[#050505] flex flex-col p-6 shrink-0 select-none">
+        <div className="flex items-center gap-3 mb-8">
+          <img 
+            src="/logo.jpg" 
+            alt="LifecycleZero Logo" 
+            className="h-8 w-8 rounded object-cover border border-zinc-800" 
+          />
+          <span className="font-bold text-base tracking-widest text-white uppercase">
             LifecycleZero
           </span>
         </div>
 
         {/* Org Display */}
-        <div className="mb-6 pb-6 border-b border-[#262626]">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
-          <div className="w-full bg-[#0a0a0a] border border-[#262626] text-zinc-300 px-3 py-2 rounded-lg font-mono text-xs flex justify-between items-center select-none">
-            <span>Demo Org (org_demo_123)</span>
-            <span className="text-[10px] text-zinc-500 font-semibold">[LIVE]</span>
+        <div className="mb-6 pb-6 border-b border-zinc-900">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
+          <div className="w-full bg-[#0a0a0a] border border-zinc-900 text-zinc-400 px-3 py-2 rounded font-mono text-xs flex justify-between items-center">
+            <span>org_demo_123</span>
+            <span className="text-[10px] text-green-500 font-semibold">[LIVE]</span>
           </div>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-2">Workspace</p>
+        <nav className="flex-1 space-y-2">
+          <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-2">Workspace</p>
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-[#131313] transition"
+            className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
           >
-            📊 Overview
+            <LayoutDashboard className="h-4 w-4" />
+            OVERVIEW
           </Link>
           <Link
             href="/dashboard/assets"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-[#131313] transition"
+            className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
           >
-            💻 Hardware Fleet
+            <Laptop className="h-4 w-4" />
+            HARDWARE FLEET
           </Link>
           <Link
             href="/dashboard/procurement"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-[#131313] transition"
+            className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
           >
-            🛒 Procurement Queue
+            <ShoppingCart className="h-4 w-4" />
+            PROCUREMENT QUEUE
           </Link>
-          <div className="pt-4 mt-4 border-t border-[#262626]">
+          <div className="pt-4 mt-4 border-t border-zinc-900">
             <Link
               href="/security"
-              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-red-400 hover:text-red-300 hover:bg-red-950/20 transition border border-dashed border-red-900/50"
+              className="flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-rose-500 hover:text-rose-400 hover:bg-rose-950/20 transition border border-dashed border-rose-900/40"
             >
-              🛡️ AI Threat Console
+              <ShieldAlert className="h-4 w-4" />
+              AI THREAT CONSOLE
             </Link>
           </div>
         </nav>
 
         {/* User profile section */}
-        <div className="pt-6 border-t border-[#262626] flex items-center justify-between">
+        <div className="pt-6 border-t border-zinc-900 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#0a0a0a] border border-[#262626] flex items-center justify-center text-[10px] font-mono text-zinc-400 select-none">
+            <div className="w-8 h-8 rounded bg-[#0a0a0a] border border-zinc-800 flex items-center justify-center text-[10px] font-mono text-zinc-400">
               ADM
             </div>
             <div className="text-left">
-              <p className="text-xs font-semibold text-zinc-200">Management Panel</p>
-              <p className="text-[10px] text-zinc-500">B2B Admin Role</p>
+              <p className="text-xs font-bold text-zinc-200">Management Panel</p>
+              <p className="text-[10px] text-zinc-500 font-semibold">B2B Admin Role</p>
             </div>
           </div>
         </div>

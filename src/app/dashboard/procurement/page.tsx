@@ -7,13 +7,13 @@ export default async function ProcurementPage() {
   const pendingRequests = await getPendingProcurementRequests(tenantId);
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8">
+    <div className="p-8 max-w-7xl mx-auto space-y-8 font-mono text-zinc-300">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold text-white tracking-tight">
-          Procurement Pipeline
+      <div className="border-b border-zinc-900 pb-4">
+        <h1 className="text-2xl font-black text-white tracking-widest uppercase">
+          PROCUREMENT PIPELINE
         </h1>
-        <p className="text-zinc-400 text-sm mt-1">
+        <p className="text-zinc-500 text-[10px] mt-1.5 uppercase tracking-wider">
           Review, approve, or reject employee equipment requests. Approved items automatically spawn active provisioning logs.
         </p>
       </div>
