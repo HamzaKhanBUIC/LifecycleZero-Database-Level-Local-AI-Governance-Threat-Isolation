@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
 import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
-// Clerk components are loaded dynamically only when Clerk is active (NEXT_PUBLIC_SKIP_CLERK !== "true")
+import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Tactical3DGrid from "./Tactical3DGrid";
 import { audio } from "@/lib/audio";
@@ -55,6 +55,7 @@ interface DashboardProps {
   initialAssets: any[];
   initialAlerts: any[];
   tenantId?: string;
+  isForcedDemo?: boolean;
 }
 
 const isUnreachable = (asset: any) => {
@@ -90,13 +91,13 @@ const SCENARIOS = {
     }
   },
   scenario3: {
-    name: "cursor.exe Accessing index.css (Clean)",
+    name: "teams.exe Syncing calendar_sync.json (Clean)",
     payload: {
       tenantId: DEFAULT_TENANT_ID,
       assetId: "AST-M3PRO-001",
-      processName: "cursor.exe",
-      filesAccessed: ["index.css"],
-      cpuUsage: 5,
+      processName: "teams.exe",
+      filesAccessed: ["calendar_sync.json"],
+      cpuUsage: 4,
       ramUsage: 2,
       networkEgress: 1
     }
@@ -105,17 +106,29 @@ const SCENARIOS = {
     name: "Simulate Agent Going Silent (Heartbeat Timeout)",
     payload: {
       tenantId: DEFAULT_TENANT_ID,
-      assetId: "AST-MAC-004",
+      assetId: "AST-M3PRO-001",
       processName: "HEARTBEAT_TIMEOUT",
       filesAccessed: [],
       cpuUsage: 0,
       ramUsage: 0,
       networkEgress: 0
     }
+  },
+  scenario5: {
+    name: "antigravity.exe Refactoring /src (Clean)",
+    payload: {
+      tenantId: DEFAULT_TENANT_ID,
+      assetId: "AST-M3PRO-001",
+      processName: "antigravity.exe",
+      filesAccessed: ["package.json", "tsconfig.json"],
+      cpuUsage: 12,
+      ramUsage: 4,
+      networkEgress: 2
+    }
   }
 };
 
-export default function Dashboard({ initialAssets, initialAlerts, tenantId }: DashboardProps) {
+export default function Dashboard({ initialAssets, initialAlerts, tenantId, isForcedDemo = false }: DashboardProps) {
   const [activeTenantId, setActiveTenantId] = useState(tenantId || DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
 
@@ -138,8 +151,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as any).hydrated = true;
+      document.cookie = `lifecycle_tenant_id=${activeTenantId}; path=/;`;
     }
-  }, []);
+  }, [activeTenantId]);
   const [selectedAsset, setSelectedAsset] = useState<any | null>(null);
   const [confirmIsolate, setConfirmIsolate] = useState<any | null>(null);
   const [modalReason, setModalReason] = useState("");
@@ -150,7 +164,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
   const handleInitializeGrid = async () => {
     setInitializingGrid(true);
     try {
-      const res = await seedActiveTenantAction();
+      const res = await seedActiveTenantAction(activeTenantId);
       if (res.success) {
         mutate(['dashboardData', activeTenantId]);
       } else {
@@ -174,7 +188,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
   ]);
   const cliEndRef = useRef<HTMLDivElement>(null);
 
-  const [now, setNow] = useState(1782531600000);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     setIsMuted(audio.isMuted());
@@ -227,7 +241,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
               `[DASHBOARD] Fleet Heatmap will reflect the unreachable status in 2-4 seconds.`
             ]);
             audio.playAlarm();
-            mutate('dashboardData');
+            mutate(['dashboardData', activeTenantId]);
           } else {
             setSimulationLog(prev => [
               ...prev,
@@ -251,11 +265,27 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
       tenantId: activeTenantId
     };
 
+    // Auto-restore isolated target asset so simulation always works (sandbox is self-healing)
+    const targetAsset = assets.find((a: any) => a.AssetId === payload.assetId);
+    const needsRestore = targetAsset?.Status === "ISOLATED";
+
     appendLog(`[SIMULATION] Injecting telemetry for ${payload.assetId}...`, 0);
-    appendLog(`[POST /api/ingest] Payload: ${JSON.stringify(payload)}`, 600);
+    if (needsRestore) {
+      appendLog(`[PRE-CHECK] Host is ISOLATED. Auto-restoring connectivity for simulation...`, 300);
+    }
+    appendLog(`[POST /api/ingest] Payload: ${JSON.stringify(payload)}`, needsRestore ? 900 : 600);
 
     setTimeout(async () => {
       try {
+        // If asset is isolated, restore it first so ingest isn't blocked
+        if (needsRestore) {
+          await restoreAsset(activeTenantId, payload.assetId);
+          setSimulationLog(prev => [
+            ...prev,
+            `[RESTORE] Host connectivity re-established. Proceeding with injection...`
+          ]);
+        }
+
         const res = await fetch("/api/ingest", {
           method: "POST",
           headers: { 
@@ -272,12 +302,12 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
             `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
             `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
           ]);
-          if (scenario.payload.processName !== "cursor.exe") {
+          if (scenario.payload.processName !== "teams.exe" && scenario.payload.processName !== "antigravity.exe") {
             audio.playAlarm();
           } else {
             audio.playClick();
           }
-          mutate('dashboardData');
+          mutate(['dashboardData', activeTenantId]);
         } else {
           setSimulationLog(prev => [
             ...prev,
@@ -293,7 +323,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
       } finally {
         setSimulating(false);
       }
-    }, 1200);
+    }, needsRestore ? 1800 : 1200);
   };
 
   const handleIsolate = async (assetId: string, reason?: string) => {
@@ -301,7 +331,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
     setError(null);
     try {
       // Optimistic update
-      mutate('dashboardData', {
+      mutate(['dashboardData', activeTenantId], {
         ...data,
         assets: assets.map((a: any) => a.AssetId === assetId ? { ...a, Status: "ISOLATED" } : a)
       }, false);
@@ -310,15 +340,15 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
       if (res && !res.success) {
         setError(res.error || "Failed to isolate host.");
         // Rollback optimistic update
-        mutate('dashboardData');
+        mutate(['dashboardData', activeTenantId]);
       } else {
         audio.playSeverance();
-        mutate('dashboardData'); 
+        mutate(['dashboardData', activeTenantId]); 
       }
     } catch (err: any) {
       console.error("Failed to isolate:", err);
       setError(err.message || "An unexpected error occurred.");
-      mutate('dashboardData');
+      mutate(['dashboardData', activeTenantId]);
     } finally {
       setIsolatingId(null);
     }
@@ -347,7 +377,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
           "  fleet / assets      - List all tracked hosts and health status",
           "  isolate <AssetId>   - Trigger network isolation on host node",
           "  restore <AssetId>   - Restore host network connection",
-          "  simulate <1-4>      - Trigger threat simulation scenario (1-4)",
+          "  simulate <1-5>      - Trigger threat simulation scenario (1-5)",
           "  audit               - Print host compliance isolation metrics",
           "  mute / unmute       - Toggle tactile sound console",
           ""
@@ -416,7 +446,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
           if (res.success) {
             setCliHistory(prev => [...prev, `  [SUCCESS] Host network link re-established for '${id}'.`, ""]);
             if (!isMuted) audio.playClick();
-            mutate('dashboardData');
+            mutate(['dashboardData', activeTenantId]);
           } else {
             setCliHistory(prev => [...prev, `  [FAILED] API returned error: ${res.error}`, ""]);
           }
@@ -427,19 +457,40 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
       }
       case "simulate": {
         const indexStr = args[0];
-        if (!indexStr || !["1", "2", "3", "4"].includes(indexStr)) {
-          setCliHistory(prev => [...prev, "  ERROR: Specify simulation scenario index (1-4).", ""]);
+        if (!indexStr || !["1", "2", "3", "4", "5"].includes(indexStr)) {
+          setCliHistory(prev => [...prev, "  ERROR: Specify simulation scenario index (1-5).", ""]);
           break;
         }
-        const scMap = { "1": "scenario1", "2": "scenario2", "3": "scenario3", "4": "scenario4" } as const;
-        const selectedSc = scMap[indexStr as "1"|"2"|"3"|"4"];
+        const scMap = { "1": "scenario1", "2": "scenario2", "3": "scenario3", "4": "scenario4", "5": "scenario5" } as const;
+        const selectedSc = scMap[indexStr as "1"|"2"|"3"|"4"|"5"];
         setSelectedScenario(selectedSc);
         setCliHistory(prev => [...prev, `  [ACTION] Running ${SCENARIOS[selectedSc].name}...`, ""]);
         
-        // Trigger telemetry injection
-        setTimeout(() => {
-          handleInjectTelemetry();
-        }, 100);
+        // Pass scenario directly to avoid async state race condition (BUG-006 fix)
+        const scenarioToRun = SCENARIOS[selectedSc];
+        const cliPayload = { ...scenarioToRun.payload, tenantId: activeTenantId };
+        setSimulating(true);
+        setSimulationCount(prev => prev + 1);
+        setSimulationLog([]);
+        setTimeout(async () => {
+          try {
+            const res = await fetch("/api/ingest", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Agent-Key": "demo_agent_key_99" },
+              body: JSON.stringify(cliPayload)
+            });
+            const resData = await res.json();
+            setSimulationLog(res.ok
+              ? [`[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`, `[QUEUE] Worker processing in 2-4 seconds.`]
+              : [`[RESPONSE ${res.status}] FAILED: ${resData.error || "Unknown error"}`]);
+            if (res.ok && scenarioToRun.payload.processName !== "teams.exe" && scenarioToRun.payload.processName !== "antigravity.exe") audio.playAlarm();
+            mutate(['dashboardData', activeTenantId]);
+          } catch (err: any) {
+            setSimulationLog([`[ERROR] Injection failed: ${err.message}`]);
+          } finally {
+            setSimulating(false);
+          }
+        }, 600);
         break;
       }
       case "audit": {
@@ -490,9 +541,10 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
       await bulkIsolateAssets(activeTenantId, ids);
       setSelectedAssetIds(new Set());
       setSelectionMode(false);
-      mutate('dashboardData');
+      mutate(['dashboardData', activeTenantId]);
     } catch (err: any) {
       console.error("Bulk isolation failed:", err);
+      setError(`Bulk isolation failed: ${err.message || "Unknown error"}`);
     } finally {
       setBulkIsolating(false);
     }
@@ -508,29 +560,32 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
             <TerminalSquare className="w-5 h-5 text-blue-500" />
             <span className="font-mono font-bold text-sm text-gray-100 tracking-tight">LIFECYCLE_ZERO</span>
             <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-zinc-400 text-[10px] font-mono uppercase tracking-widest ml-2">Enterprise</span>
-            {/* Multi-tenant switcher */}
-            <select
-              value={activeTenantId}
-              onChange={(e) => {
-                setActiveTenantId(e.target.value);
-                setSelectedAssetIds(new Set());
-                setSelectionMode(false);
-                mutate('dashboardData');
-              }}
-              className="ml-4 bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px] px-2 py-1 focus:outline-none focus:border-blue-700 cursor-pointer"
-              title="Switch tenant workspace"
-            >
-              {TENANTS.map(t => (
-                <option key={t.id} value={t.id} className="bg-zinc-900 font-mono">{t.name}</option>
-              ))}
-            </select>
+            {/* Multi-tenant switcher — demo only */}
+            {isForcedDemo && (
+              <select
+                value={activeTenantId}
+                onChange={(e) => {
+                  setActiveTenantId(e.target.value);
+                  setSelectedAssetIds(new Set());
+                  setSelectionMode(false);
+                  mutate(['dashboardData', e.target.value]);
+                }}
+                className="ml-4 bg-zinc-900 border border-zinc-700 text-zinc-300 font-mono text-[10px] px-2 py-1 focus:outline-none focus:border-blue-700 cursor-pointer"
+                title="Switch tenant workspace"
+              >
+                {TENANTS.map(t => (
+                  <option key={t.id} value={t.id} className="bg-zinc-900 font-mono">{t.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <a 
               href="/dashboard"
               className="text-[10px] font-mono px-3 py-1.5 border border-indigo-700 bg-indigo-950/20 text-indigo-400 hover:text-white hover:border-indigo-500 transition-colors flex items-center gap-1.5"
             >
-              📊 FLEET DASHBOARD
+              <Activity className="w-3 h-3" />
+              FLEET DASHBOARD
             </a>
             <a 
               href="/api/export/audit"
@@ -559,7 +614,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
               }}
               className="font-mono text-[9px] border border-zinc-850 bg-[#0a0a0a]/70 px-2 py-0.5 text-zinc-500 hover:text-white cursor-pointer hover:border-zinc-700 transition-colors uppercase tracking-wider"
             >
-              {isMuted ? "🔊 AUDIO OFF" : "🔊 AUDIO ON"}
+              {isMuted ? "🔇 AUDIO OFF" : "🔊 AUDIO ON"}
             </button>
             <div className="w-px h-4 bg-zinc-850 mx-1" />
             <div className="flex items-center gap-2">
@@ -567,12 +622,56 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
               <span className="font-mono text-xs text-green-500">SYS_ONLINE</span>
             </div>
             <div className="w-px h-4 bg-zinc-800 mx-2" />
-            <div className="w-6 h-6 rounded-sm bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-mono text-zinc-400 select-none" title="Admin">
+            {process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" ? (
+              <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                <UserButton afterSignOutUrl="/" appearance={{
+                  variables: {
+                    colorPrimary: '#ffffff',
+                    colorBackground: '#050505',
+                    colorText: '#ffffff'
+                  }
+                }} />
+              </div>
+            ) : (
+              <div className="w-6 h-6 rounded-sm bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-mono text-zinc-400 select-none cursor-help" title="Local Sandbox Administrator Role [CLERK BYPASS ACTIVE]">
                 ADM
               </div>
+            )}
           </div>
         </div>
       </nav>
+
+      {isForcedDemo && (
+        <div className="bg-indigo-950/45 border-b border-indigo-500/35 px-4 py-2 text-center font-mono text-xs text-indigo-300 flex flex-wrap items-center justify-center gap-3 backdrop-blur-md sticky top-14 z-40">
+          <span className="flex items-center gap-1.5 font-bold tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+            [🔬 ACTIVE JUDGES SANDBOX MODE — PREPOPULATED SIMULATED FLEET ACTIVE]
+          </span>
+          <button
+            onClick={async () => {
+              setInitializingGrid(true);
+              try {
+                const res = await seedActiveTenantAction();
+                if (res.success) {
+                  mutate(['dashboardData', activeTenantId]);
+                  alert("Sandbox data has been successfully reset to pristine state!");
+                } else {
+                  alert("Failed to reset sandbox: " + res.error);
+                }
+              } catch (err: any) {
+                console.error("Reset error:", err);
+                alert("Failed to reset sandbox: " + (err.message || err));
+              } finally {
+                setInitializingGrid(false);
+              }
+            }}
+            disabled={initializingGrid}
+            className="px-2 py-0.5 border border-indigo-400/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-white rounded-sm text-[9px] uppercase font-bold tracking-widest transition cursor-pointer select-none disabled:opacity-50"
+          >
+            {initializingGrid ? "RESETTING..." : "RESET SANDBOX"}
+          </button>
+        </div>
+      )}
 
       {/* T09: Live Stats Ticker */}
       <div className="w-full bg-red-950/80 border-b border-red-900 text-red-500 font-mono text-[10px] uppercase tracking-widest overflow-hidden py-1.5 flex items-center shadow-[0_0_15px_rgba(220,38,38,0.15)] relative z-25">
@@ -622,7 +721,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <MetricCard icon={<Server />} title="ASSETS_TRACKED" value={assets.length} loading={isReallyLoading} />
           <MetricCard icon={<Cpu />} title="ROGUE_MODELS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL' || a.RiskLevel === 'WARNING').length} loading={isReallyLoading} />
-          <MetricCard icon={<Activity />} title="SIMULATION_EVENTS" value={simulationCount} loading={false} />
+          {isForcedDemo
+            ? <MetricCard icon={<Activity />} title="SIMULATION_EVENTS" value={simulationCount} loading={false} />
+            : <MetricCard icon={<Shield />} title="ISOLATED_HOSTS" value={assets.filter((a: any) => a.Status === 'ISOLATED').length} loading={isReallyLoading} />}
           <MetricCard icon={<ShieldAlert />} title="ACTIVE_THREATS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL').length} loading={isReallyLoading} alert />
         </div>
 
@@ -688,12 +789,12 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
                   <div className="flex items-center justify-center h-full text-zinc-600 font-mono text-xs">[NO_INCIDENTS_FOUND]</div>
                 ) : (
                   <div className="space-y-3">
-                    {alerts.map((alert: any, i: number) => {
+                    {alerts.map((alert: any) => {
                       const isIsolated = assets.find((a: any) => a.AssetId === alert.AssetId)?.Status === 'ISOLATED';
                       const isCritical = alert.RiskLevel === 'CRITICAL';
                       
                       return (
-                        <div key={i} className={`p-4 border bg-zinc-900/30 ${isIsolated ? 'border-zinc-800 opacity-60' : isCritical ? 'border-red-900/50 bg-red-950/10' : 'border-amber-900/30'} flex flex-col gap-3 relative`}>
+                        <div key={`${alert.AssetId}-${alert.Timestamp}`} className={`p-4 border bg-zinc-900/30 ${isIsolated ? 'border-zinc-800 opacity-60' : isCritical ? 'border-red-900/50 bg-red-950/10' : 'border-amber-900/30'} flex flex-col gap-3 relative`}>
                         {/* Status Bar */}
                         <div className={`absolute top-0 left-0 w-1 h-full ${isIsolated ? 'bg-zinc-700' : isCritical ? 'bg-red-500' : 'bg-amber-500'}`} />
                         
@@ -842,7 +943,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
                         : 'border-zinc-700 text-zinc-500 hover:border-zinc-500'
                     }`}
                   >
-                    {view3d ? '2D VIEW' : '3D VIEW'}
+                    {view3d ? '⊞ 2D' : '⬛ 3D'}
                   </button>
                   <button
                     onClick={() => { setSelectionMode(m => !m); setSelectedAssetIds(new Set()); }}
@@ -959,58 +1060,60 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId }: Da
               </div>
             </div>
 
-            {/* Simulation Console Card */}
-            <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[336px]">
-              <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
-                <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-blue-500" />
-                  Threat Simulation Sandbox
-                </h2>
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-none animate-ping" />
-              </div>
-              
-              <div className="p-3 flex flex-col flex-1 gap-2.5 justify-between">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select Threat Vector</label>
-                  <select 
-                    value={selectedScenario}
-                    onChange={(e) => setSelectedScenario(e.target.value as any)}
-                    className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
-                  >
-                    {Object.entries(SCENARIOS).map(([key, val]) => (
-                      <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
-                        {val.name}
-                      </option>
+            {/* Simulation Console Card — demo only */}
+            {isForcedDemo && (
+              <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[336px]">
+                <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                  <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-blue-500" />
+                    Threat Simulation Sandbox
+                  </h2>
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-none animate-ping" />
+                </div>
+                
+                <div className="p-3 flex flex-col flex-1 gap-2.5 justify-between">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select Threat Vector</label>
+                    <select 
+                      value={selectedScenario}
+                      onChange={(e) => setSelectedScenario(e.target.value as any)}
+                      className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
+                    >
+                      {Object.entries(SCENARIOS).map(([key, val]) => (
+                        <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
+                          {val.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Simulation Output Console */}
+                  <div className="flex-1 bg-[#050505] border border-green-900/30 p-3 font-mono text-[10px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[140px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
+                    {simulationLog.map((logLine, idx) => (
+                      <div key={idx} className="text-green-500/90 leading-tight">
+                        <span className="text-green-800/70 mr-2">[{new Date(Date.now() - (simulationLog.length - 1 - idx) * 600).toISOString().split('T')[1].slice(0,12)}]</span>
+                        <span className={logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-400" : ""}>{logLine}</span>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                    <div className="w-1.5 h-3 bg-green-500 mt-1 animate-pulse"></div>
+                    {/* Scanline overlay */}
+                    <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20 mix-blend-overlay"></div>
+                  </div>
 
-                {/* Simulation Output Console */}
-                <div className="flex-1 bg-[#050505] border border-green-900/30 p-3 font-mono text-[10px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[140px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
-                  {simulationLog.map((logLine, idx) => (
-                    <div key={idx} className="text-green-500/90 leading-tight">
-                      <span className="text-green-800/70 mr-2">[{new Date().toISOString().split('T')[1].slice(0,12)}]</span>
-                      <span className={logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-400" : ""}>{logLine}</span>
-                    </div>
-                  ))}
-                  <div className="w-1.5 h-3 bg-green-500 mt-1 animate-pulse"></div>
-                  {/* Scanline overlay */}
-                  <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20 mix-blend-overlay"></div>
+                  <button
+                    onClick={() => { handleInjectTelemetry(); }}
+                    disabled={simulating}
+                    className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold ${
+                      simulating 
+                        ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' 
+                        : 'bg-blue-950/40 border-blue-900 text-blue-400 hover:bg-blue-900 hover:text-white cursor-pointer'
+                    }`}
+                  >
+                    {simulating ? "INJECTING TELEMETRY..." : "RUN THREAT SIMULATION"}
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => { handleInjectTelemetry(); }}
-                  disabled={simulating}
-                  className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold ${
-                    simulating 
-                      ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' 
-                      : 'bg-blue-950/40 border-blue-900 text-blue-400 hover:bg-blue-900 hover:text-white cursor-pointer'
-                  }`}
-                >
-                  {simulating ? "INJECTING TELEMETRY..." : "RUN THREAT SIMULATION"}
-                </button>
               </div>
-            </div>
+            )}
 
           </div>
 
