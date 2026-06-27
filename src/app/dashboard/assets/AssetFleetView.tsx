@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { HardwareAsset, Employee } from "@/lib/types";
-import { updateAssetStatusAction } from "@/lib/api";
+import { updateAssetStatusAction, registerAssetAction } from "@/lib/api";
 import Sparkline from "@/components/Sparkline";
+import { Plus, X, Server } from "lucide-react";
 
 interface AssetFleetViewProps {
   initialAssets: HardwareAsset[];
@@ -15,6 +16,16 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
   const [assets, setAssets] = useState<HardwareAsset[]>(initialAssets);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [employeeFilter, setEmployeeFilter] = useState<string>("ALL");
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Registration Modal State
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [newAssetId, setNewAssetId] = useState("");
+  const [newAssetName, setNewAssetName] = useState("");
+  const [newAssetType, setNewAssetType] = useState<HardwareAsset['Type']>("LAPTOP");
+  const [newSerialNo, setNewSerialNo] = useState("");
+  const [newEmployeeId, setNewEmployeeId] = useState("UNASSIGNED");
+  const [isPending, startTransition] = useTransition();
 
   // Filtering logic
   const filteredAssets = assets.filter(asset => {
@@ -28,8 +39,12 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
     const actionDesc = `STATUS_UPDATED_${newStatus}`;
     const detailsDesc = `Asset status moved to ${newStatus} by IT Administrator.`;
     
+    // Snapshot for rollback
+    const previousAssets = assets;
+    
     // Optimistic UI update
     setAssets(prev => prev.map(a => a.AssetId === assetId ? { ...a, Status: newStatus, EmployeeId: empId, EmployeeName: empName } : a));
+    setActionError(null);
 
     const result = await updateAssetStatusAction({
       assetId,
@@ -41,24 +56,79 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
     });
 
     if (!result.success) {
-      alert(`Error updating asset: ${result.error}`);
-      // Revert if error
-      setAssets(initialAssets);
+      setActionError(`Failed to update asset: ${result.error || "Unknown error"}`);
+      // Rollback to last known good state
+      setAssets(previousAssets);
     }
   }
 
+  // Handle register form submit
+  async function handleRegisterDevice(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newAssetId.trim() || !newAssetName.trim()) return;
+
+    const matchedEmp = employees.find(emp => emp.EmployeeId === newEmployeeId);
+    const empName = matchedEmp ? matchedEmp.EmployeeName : "Unassigned";
+
+    setActionError(null);
+    startTransition(async () => {
+      const res = await registerAssetAction({
+        assetId: newAssetId.trim().toUpperCase(),
+        assetName: newAssetName.trim(),
+        type: newAssetType,
+        serialNo: newSerialNo.trim(),
+        status: "ACTIVE",
+        employeeId: newEmployeeId,
+        employeeName: empName
+      });
+
+      if (res.success) {
+        // Local state append
+        const newAsset: HardwareAsset = {
+          PK: `TENANT#NEW`,
+          SK: `ASSET#${newAssetId.trim().toUpperCase()}`,
+          AssetId: newAssetId.trim().toUpperCase(),
+          AssetName: newAssetName.trim(),
+          SerialNo: newSerialNo.trim() || `SN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+          Type: newAssetType,
+          Status: "ACTIVE",
+          EmployeeId: newEmployeeId,
+          EmployeeName: empName,
+          UpdatedAt: new Date().toISOString()
+        };
+        setAssets(prev => [newAsset, ...prev]);
+        setShowRegisterModal(false);
+        
+        // Reset inputs
+        setNewAssetId("");
+        setNewAssetName("");
+        setNewSerialNo("");
+        setNewEmployeeId("UNASSIGNED");
+      } else {
+        setActionError(res.error || "Failed to register asset.");
+      }
+    });
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-mono">
+      {actionError && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-sm flex items-center justify-between gap-2">
+          <span>ERROR: {actionError.toUpperCase()}</span>
+          <button onClick={() => setActionError(null)} className="text-zinc-500 hover:text-white cursor-pointer">✕</button>
+        </div>
+      )}
+
       {/* Filters Bar */}
       <div className="flex flex-col sm:flex-row gap-4 items-center justify-between p-4 bg-[#0a0a0a] border border-[#262626] rounded-sm">
         <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
           {/* Status Filter */}
           <div className="flex flex-col">
-            <label className="text-[9px] uppercase font-bold font-mono text-zinc-500 mb-1 tracking-wider">Status</label>
+            <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-[#050505] border border-[#262626] text-xs font-mono rounded-sm px-3 py-1.5 focus:outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+              className="bg-[#050505] border border-[#262626] text-xs rounded-sm px-3 py-1.5 focus:outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
             >
               <option value="ALL">ALL STATUSES</option>
               <option value="ACTIVE">ACTIVE</option>
@@ -72,11 +142,11 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
 
           {/* Employee Filter */}
           <div className="flex flex-col">
-            <label className="text-[9px] uppercase font-bold font-mono text-zinc-500 mb-1 tracking-wider">Assigned Employee</label>
+            <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Assigned Employee</label>
             <select
               value={employeeFilter}
               onChange={(e) => setEmployeeFilter(e.target.value)}
-              className="bg-[#050505] border border-[#262626] text-xs font-mono rounded-sm px-3 py-1.5 focus:outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
+              className="bg-[#050505] border border-[#262626] text-xs rounded-sm px-3 py-1.5 focus:outline-none focus:border-zinc-500 text-zinc-300 cursor-pointer"
             >
               <option value="ALL">ALL EMPLOYEES</option>
               <option value="UNASSIGNED">UNASSIGNED</option>
@@ -87,8 +157,18 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
           </div>
         </div>
 
-        <div className="text-xs font-mono text-zinc-500">
-          SHOWING <span className="text-white font-semibold">{filteredAssets.length}</span> OF {assets.length} ASSETS
+        {/* Info & Action Button */}
+        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="text-xs text-zinc-500">
+            SHOWING <span className="text-white font-semibold">{filteredAssets.length}</span> OF {assets.length} ASSETS
+          </div>
+          <button
+            onClick={() => setShowRegisterModal(true)}
+            className="px-3.5 py-1.5 bg-[#00FF41]/10 hover:bg-[#00FF41]/25 text-[#00FF41] border border-[#00FF41]/30 hover:border-[#00FF41]/50 text-xs font-bold uppercase transition flex items-center gap-1.5 cursor-pointer rounded-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Register Device
+          </button>
         </div>
       </div>
 
@@ -186,6 +266,110 @@ export default function AssetFleetView({ initialAssets, employees }: AssetFleetV
           </table>
         </div>
       </div>
+
+      {/* ── Register Device Modal Overlay ── */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#09090b] border border-zinc-800 rounded-sm overflow-hidden font-mono shadow-[0_0_50px_rgba(0,255,65,0.04)]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-800 bg-[#0c0c0e] flex justify-between items-center">
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Server className="w-4 h-4 text-[#00FF41]" />
+                Register New Device
+              </h3>
+              <button 
+                onClick={() => setShowRegisterModal(false)}
+                className="text-zinc-500 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleRegisterDevice} className="p-6 space-y-4">
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Asset ID * (Unique Name)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. AST-PHONE-HAMZA"
+                  value={newAssetId}
+                  onChange={(e) => setNewAssetId(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-900 rounded px-3 py-2 text-xs focus:outline-none focus:border-zinc-700 text-white placeholder-zinc-700 uppercase"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Device Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Hamza's Phone"
+                  value={newAssetName}
+                  onChange={(e) => setNewAssetName(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-900 rounded px-3 py-2 text-xs focus:outline-none focus:border-zinc-700 text-white placeholder-zinc-700"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Device Type</label>
+                <select
+                  value={newAssetType}
+                  onChange={(e) => setNewAssetType(e.target.value as HardwareAsset['Type'])}
+                  className="bg-zinc-950 border border-zinc-900 rounded px-3 py-2 text-xs focus:outline-none focus:border-zinc-700 text-zinc-300 cursor-pointer"
+                >
+                  <option value="LAPTOP">Laptop</option>
+                  <option value="MOBILE">Mobile / Phone</option>
+                  <option value="MONITOR">Monitor</option>
+                  <option value="PERIPHERAL">Peripheral</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Serial Number (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="Leave empty for auto-generated SN"
+                  value={newSerialNo}
+                  onChange={(e) => setNewSerialNo(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-900 rounded px-3 py-2 text-xs focus:outline-none focus:border-zinc-700 text-white placeholder-zinc-700"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[9px] uppercase font-bold text-zinc-500 mb-1 tracking-wider">Assign to Employee</label>
+                <select
+                  value={newEmployeeId}
+                  onChange={(e) => setNewEmployeeId(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-900 rounded px-3 py-2 text-xs focus:outline-none focus:border-zinc-700 text-zinc-300 cursor-pointer font-mono"
+                >
+                  <option value="UNASSIGNED">UNASSIGNED (OPEN STOCK)</option>
+                  {employees.map(emp => (
+                    <option key={emp.EmployeeId} value={emp.EmployeeId}>{emp.EmployeeName.toUpperCase()}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRegisterModal(false)}
+                  className="w-1/2 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold border border-zinc-800 hover:border-zinc-700 rounded-sm text-xs uppercase tracking-widest transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending || !newAssetId.trim() || !newAssetName.trim()}
+                  className="w-1/2 py-2 bg-[#00FF41] hover:bg-[#00E53A] text-black font-bold disabled:bg-zinc-900 disabled:text-zinc-600 rounded-sm text-xs uppercase tracking-widest transition flex items-center justify-center gap-1.5 cursor-pointer border-none"
+                >
+                  {isPending ? "Registering..." : "Confirm"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
