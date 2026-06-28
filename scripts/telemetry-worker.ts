@@ -90,25 +90,26 @@ async function processTelemetryItem(payload: any) {
     console.log(`[ALARM WEBHOOK] 🚨 PagerDuty incident triggered for organization ${tenantId}. Incident Details: ${aiResult.reasoning}`);
   }
 
-  // Write to DynamoDB
-  await docClient.send(new PutCommand({
-    TableName: TABLE_NAME,
-    Item: telemetry
-  }));
-
-  // Update Asset LastHeartbeat asynchronously
+  // Write to DynamoDB and update heartbeat in parallel to optimize throughput (AWS best practice)
   try {
-    await docClient.send(new UpdateCommand({
-      TableName: TABLE_NAME,
-      Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
-      UpdateExpression: "SET LastHeartbeat = :ts",
-      ExpressionAttributeValues: {
-        ":ts": new Date().toISOString()
-      }
-    }));
-    console.log(`[WORKER] Updated heartbeat for ${assetId}`);
+    await Promise.all([
+      docClient.send(new PutCommand({
+        TableName: TABLE_NAME,
+        Item: telemetry
+      })),
+      docClient.send(new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+        UpdateExpression: "SET LastHeartbeat = :ts",
+        ExpressionAttributeValues: {
+          ":ts": new Date().toISOString()
+        }
+      }))
+    ]);
+    console.log(`[WORKER] Successfully updated telemetry and heartbeat for ${assetId}`);
   } catch (err) {
-    console.error(`[WORKER] Failed to update heartbeat for ${assetId}:`, err);
+    console.error(`[WORKER ERROR] Database write failed for ${assetId}:`, err);
+    throw err; // Bubble up error so SQS message is not deleted and gets retried / sent to DLQ
   }
 
   console.log(`[WORKER SUCCESS] Processed event for ${assetId}. Risk: ${aiResult.riskLevel} - ${aiResult.reasoning}`);

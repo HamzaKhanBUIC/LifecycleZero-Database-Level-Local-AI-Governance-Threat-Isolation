@@ -54,21 +54,21 @@ async function processTelemetryInline(payload: any) {
     telemetry.GSI2SK = `DATE#${timestamp}`;
   }
 
-  // Write directly to DynamoDB table
-  await docClient.send(new PutCommand({
-    TableName: TABLE_NAME,
-    Item: telemetry
-  }));
-
-  // Update Asset LastHeartbeat
-  await docClient.send(new UpdateCommand({
-    TableName: TABLE_NAME,
-    Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
-    UpdateExpression: "SET LastHeartbeat = :ts",
-    ExpressionAttributeValues: {
-      ":ts": new Date().toISOString()
-    }
-  }));
+  // Write directly to DynamoDB table and update heartbeat in parallel to optimize latency (AWS best practice)
+  await Promise.all([
+    docClient.send(new PutCommand({
+      TableName: TABLE_NAME,
+      Item: telemetry
+    })),
+    docClient.send(new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+      UpdateExpression: "SET LastHeartbeat = :ts",
+      ExpressionAttributeValues: {
+        ":ts": new Date().toISOString()
+      }
+    }))
+  ]);
   
   console.log(`[INLINE PROCESSING] Successfully processed telemetry alert for ${assetId}. Risk: ${aiResult.riskLevel}`);
   return aiResult;
@@ -180,11 +180,16 @@ export async function POST(request: Request) {
     // 4. Send to SQS (or local fallback file)
     const result = await sendToQueue(queuePayload);
 
-    // 5. Instantly process telemetry inline to update the dashboard immediately for real-time visibility.
-    // This allows the threat simulations to work seamlessly even when a background worker daemon is not running (e.g., Serverless Vercel).
-    processTelemetryInline(queuePayload).catch((err) => {
-      console.error("Inline telemetry processing fallback failed:", err);
-    });
+    // 5. Instantly process telemetry inline only for sandbox/demo tenants to update the dashboard immediately for real-time visibility.
+    // Production tenants bypass inline processing entirely to save execution capacity and avoid double-writing bottlenecks.
+    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+    if (allowedSandboxTenants.includes(tenantId)) {
+      processTelemetryInline(queuePayload).catch((err) => {
+        console.error("Inline telemetry processing fallback failed:", err);
+      });
+    } else {
+      console.log(`[INGEST] Asynchronous queue ingestion active for enterprise tenant ${tenantId}. Inline bypass active.`);
+    }
 
     // 6. Return 202 Accepted (Standard for high-throughput queues)
     return NextResponse.json({
