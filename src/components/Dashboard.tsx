@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -17,21 +17,34 @@ const TENANTS = [
 ];
 const DEFAULT_TENANT_ID = "org_demo_123";
 
-const generateChartData = (alerts: any[]) => {
+const generateChartData = (alerts: any[], telemetryLogs: any[] = [], isSandbox: boolean = false) => {
   const chartData = [];
   const now = Date.now();
   for (let i = 15; i >= 0; i--) {
     const time = new Date(now - i * 60000);
     const timeString = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
     
-    const alertsInMinute = alerts.filter((a: any) => {
-      const aTime = new Date(a.Timestamp).getTime();
-      return aTime >= time.getTime() && aTime < time.getTime() + 60000;
-    });
-    
-    const hasCritical = alertsInMinute.some((a: any) => a.RiskLevel === 'CRITICAL');
-    const baseEgress = Math.floor(Math.random() * 40) + 10;
-    const egressVal = hasCritical ? baseEgress + Math.floor(Math.random() * 800) + 400 : baseEgress;
+    let egressVal = 0;
+
+    if (isSandbox) {
+      // Sandbox: simulate egress based on alerts to show interactive spikes
+      const alertsInMinute = alerts.filter((a: any) => {
+        const aTime = new Date(a.Timestamp).getTime();
+        return aTime >= time.getTime() && aTime < time.getTime() + 60000;
+      });
+      const hasCritical = alertsInMinute.some((a: any) => a.RiskLevel === 'CRITICAL');
+      const baseEgress = Math.floor(Math.random() * 40) + 10;
+      egressVal = hasCritical ? baseEgress + Math.floor(Math.random() * 800) + 400 : baseEgress;
+    } else {
+      // Enterprise: Aggregate actual network egress from telemetry database records
+      if (telemetryLogs && telemetryLogs.length > 0) {
+        const logsInMinute = telemetryLogs.filter((t: any) => {
+          const tTime = new Date(t.Timestamp).getTime();
+          return tTime >= time.getTime() && tTime < time.getTime() + 60000;
+        });
+        egressVal = logsInMinute.reduce((sum: number, log: any) => sum + (Number(log.NetworkEgress) || 0), 0);
+      }
+    }
 
     chartData.push({
       time: timeString,
@@ -42,13 +55,20 @@ const generateChartData = (alerts: any[]) => {
 };
 
 const fetchDashboardData = async (tenantId: string) => {
-  const [fetchedAssets, fetchedAlerts, configRes] = await Promise.all([
+  const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+  const isSandbox = allowedSandboxTenants.includes(tenantId);
+
+  const [fetchedAssets, fetchedAlerts, configRes, telemetryRes] = await Promise.all([
     getAssets(tenantId),
     getCrossAssetAlerts(tenantId),
-    getTenantOllamaConfigAction()
+    getTenantOllamaConfigAction(),
+    isSandbox ? Promise.resolve({ success: true, telemetry: [] }) : getTenantTelemetryAction(tenantId)
   ]);
+
   const sortedAlerts = fetchedAlerts.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
-  const chartData = generateChartData(sortedAlerts);
+  const telemetryLogs = telemetryRes?.success ? telemetryRes.telemetry : [];
+  const chartData = generateChartData(sortedAlerts, telemetryLogs, isSandbox);
+
   return { 
     assets: fetchedAssets, 
     alerts: sortedAlerts, 
@@ -147,7 +167,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     fallbackData: {
       assets: initialAssets || [],
       alerts: sortedInitialAlerts,
-      chartData: generateChartData(sortedInitialAlerts),
+      chartData: generateChartData(sortedInitialAlerts, [], ["org_demo_123", "org_fintech_456", "org_healthco_789"].includes(activeTenantId)),
       ollamaConfig: {
         evaluationMode: 'HYBRID_HEURISTIC',
         ollamaEndpoint: 'http://localhost:11434',

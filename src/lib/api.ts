@@ -11,7 +11,8 @@ import {
   seedActiveTenantAction,
   registerAssetAction,
   getTenantOllamaConfigAction,
-  updateTenantOllamaConfigAction
+  updateTenantOllamaConfigAction,
+  getTenantTelemetryAction
 } from "@/app/actions/api";
 
 export { 
@@ -27,7 +28,8 @@ export {
   seedActiveTenantAction,
   registerAssetAction,
   getTenantOllamaConfigAction,
-  updateTenantOllamaConfigAction
+  updateTenantOllamaConfigAction,
+  getTenantTelemetryAction
 };
 
 /**
@@ -47,4 +49,5 @@ export class LifecycleZeroAPI {
   static registerAssetAction = registerAssetAction;
   static getTenantOllamaConfigAction = getTenantOllamaConfigAction;
   static updateTenantOllamaConfigAction = updateTenantOllamaConfigAction;
+  static getTenantTelemetryAction = getTenantTelemetryAction;
 }

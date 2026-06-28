@@ -696,3 +696,51 @@ export async function updateTenantOllamaConfigAction(config: {
   }
 }
 
+/**
+ * Server action to get all sharded telemetry data for a given tenant within the last 15 minutes
+ */
+export async function getTenantTelemetryAction(tenantId: string) {
+  try {
+    const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
+    let activeTenantId = tenantId;
+    if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
+      try {
+        const context = await getTenantContext();
+        if (context.tenantId) {
+          activeTenantId = context.tenantId;
+        }
+      } catch {
+        console.warn("[getTenantTelemetryAction] Fallback to client tenantId:", tenantId);
+      }
+    }
+
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    const promises = Array.from({ length: 10 }).map((_, shardId) => {
+      const command = new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND SK > :skPrefix",
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${activeTenantId}#TELEMETRY#SHARD#${shardId}`,
+          ":skPrefix": `TELEMETRY#`,
+        },
+      });
+      return docClient.send(command).then(res => res.Items || []);
+    });
+
+    const results = await Promise.all(promises);
+    const allTelemetry = results.flat();
+
+    // Filter and sort by timestamp
+    const filtered = allTelemetry
+      .filter(item => item.Timestamp >= fifteenMinutesAgo)
+      .sort((a, b) => b.Timestamp.localeCompare(a.Timestamp));
+
+    return { success: true, telemetry: filtered };
+  } catch (error: any) {
+    console.error("❌ getTenantTelemetryAction Error:", error);
+    return { success: false, error: error.message, telemetry: [] };
+  }
+}
+
+
