@@ -76,7 +76,8 @@ const fetchDashboardData = async (tenantId: string) => {
     ollamaConfig: configRes.success ? configRes.config : {
       evaluationMode: 'HYBRID_HEURISTIC',
       ollamaEndpoint: 'http://localhost:11434',
-      ollamaModel: 'llama3'
+      ollamaModel: 'llama3',
+      sensitiveFilePatterns: DEFAULT_SENSITIVE_PATTERNS
     }
   };
 };
@@ -176,7 +177,8 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
       ollamaConfig: {
         evaluationMode: 'HYBRID_HEURISTIC',
         ollamaEndpoint: 'http://localhost:11434',
-        ollamaModel: 'llama3'
+        ollamaModel: 'llama3',
+        sensitiveFilePatterns: DEFAULT_SENSITIVE_PATTERNS
       }
     }
   });
@@ -1255,7 +1257,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
             {/* Simulation Console Card — demo only */}
             {isForcedDemo && (
-              <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[400px]">
+              <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[270px]">
                 <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                   <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                     <Bot className="w-4 h-4 text-blue-500" />
@@ -1265,139 +1267,30 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 </div>
                 
                 <div className="p-3 flex flex-col flex-1 gap-2.5 justify-between">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider">Select Threat Vector</label>
-                      <select 
-                        value={selectedScenario}
-                        onChange={(e) => setSelectedScenario(e.target.value as any)}
-                        className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
-                      >
-                        {Object.entries(SCENARIOS).map(([key, val]) => (
-                          <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
-                            {val.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="border border-zinc-800/80 bg-zinc-900/20 p-2 flex flex-col gap-2">
-                      <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
-                        <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Ollama Configuration</span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleSaveOllamaConfig('HYBRID_HEURISTIC')}
-                            disabled={savingConfig}
-                            className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
-                              ollamaConfig.evaluationMode === 'HYBRID_HEURISTIC'
-                                ? 'bg-indigo-950/40 border-indigo-700 text-indigo-400 hover:bg-indigo-900 hover:text-white'
-                                : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
-                            }`}
-                          >
-                            HYBRID
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveOllamaConfig('PURE_OLLAMA')}
-                            disabled={savingConfig}
-                            className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
-                              ollamaConfig.evaluationMode === 'PURE_OLLAMA'
-                                ? 'bg-amber-950/40 border-amber-700 text-amber-400 hover:bg-amber-900 hover:text-white'
-                                : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
-                            }`}
-                          >
-                            PURE OLLAMA
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col gap-0.5">
-                          <label className="text-[8px] font-mono text-zinc-500 uppercase">Endpoint</label>
-                          <input 
-                            type="text"
-                            value={customEndpoint}
-                            onChange={(e) => setCustomEndpoint(e.target.value)}
-                            placeholder="http://localhost:11434"
-                            className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
-                          />
-                        </div>
-                        <div className="flex flex-col gap-0.5">
-                          <label className="text-[8px] font-mono text-zinc-500 uppercase">Model Name</label>
-                          <select
-                            value={['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) ? customModel : 'custom'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === 'custom') {
-                                setCustomModel('');
-                              } else {
-                                setCustomModel(val);
-                              }
-                            }}
-                            className="bg-zinc-950 border border-zinc-800 px-1 py-0.5 text-[8px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 rounded-none cursor-pointer mb-1"
-                          >
-                            <option value="llama3" className="bg-[#09090b]">llama3</option>
-                            <option value="qwen2.5-coder:7b" className="bg-[#09090b]">qwen2.5-coder:7b</option>
-                            <option value="mistral" className="bg-[#09090b]">mistral</option>
-                            <option value="gemma" className="bg-[#09090b]">gemma</option>
-                            <option value="phi3" className="bg-[#09090b]">phi3</option>
-                            <option value="custom" className="bg-[#09090b]">Custom Model...</option>
-                          </select>
-                          
-                          {(!['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) || customModel === '') && (
-                            <input 
-                              type="text"
-                              value={customModel}
-                              onChange={(e) => setCustomModel(e.target.value)}
-                              placeholder="Type custom model name..."
-                              className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 animate-fadeIn"
-                            />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-0.5 mb-1">
-                        <label className="text-[8px] font-mono text-zinc-500 uppercase">Sensitive File Patterns (comma-separated)</label>
-                        <input 
-                          type="text"
-                          value={customPatterns}
-                          onChange={(e) => setCustomPatterns(e.target.value)}
-                          placeholder="e.g. payroll, credential, secret, .env"
-                          className="bg-zinc-950 border border-zinc-800 px-1.5 py-1 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
-                        />
-                      </div>
-
-                      {connectionStatus.status !== 'idle' && (
-                        <div className={`text-[9px] font-mono p-1.5 border leading-relaxed ${
-                          connectionStatus.status === 'success'
-                            ? 'bg-green-950/20 border-green-900 text-green-400'
-                            : 'bg-red-950/20 border-red-900 text-red-400'
-                        }`}>
-                          {connectionStatus.status === 'success' ? '✔ ' : '✘ '} {connectionStatus.message}
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => handleSaveOllamaConfig()}
-                        disabled={savingConfig}
-                        className="w-full bg-zinc-950 border border-zinc-800 text-[8px] font-mono py-1 text-zinc-400 hover:border-zinc-600 hover:text-white transition-colors cursor-pointer"
-                      >
-                        {savingConfig ? 'APPLYING CONFIG...' : 'APPLY LOCAL MODEL CONFIG'}
-                      </button>
-                    </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider">Select Threat Vector</label>
+                    <select 
+                      value={selectedScenario}
+                      onChange={(e) => setSelectedScenario(e.target.value as any)}
+                      className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
+                    >
+                      {Object.entries(SCENARIOS).map(([key, val]) => (
+                        <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
+                          {val.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Simulation Output Console */}
-                  <div className="flex-1 bg-[#050505] border border-green-900/30 p-3 font-mono text-[10px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[140px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
+                  <div className="flex-1 bg-[#050505] border border-green-900/30 p-2.5 font-mono text-[9px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[110px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
                     {simulationLog.map((logLine, idx) => (
                       <div key={idx} className="text-green-500/90 leading-tight">
                         <span className="text-green-800/70 mr-2" suppressHydrationWarning>[{new Date(Date.now() - (simulationLog.length - 1 - idx) * 600).toISOString().split('T')[1].slice(0,12)}]</span>
                         <span className={logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-400" : ""}>{logLine}</span>
                       </div>
                     ))}
-                    <div className="w-1.5 h-3 bg-green-500 mt-1 animate-pulse"></div>
-                    {/* Scanline overlay */}
+                    <div className="w-1 h-3 bg-green-500 mt-0.5 animate-pulse"></div>
                     <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20 mix-blend-overlay"></div>
                   </div>
 
@@ -1415,6 +1308,122 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 </div>
               </div>
             )}
+
+            {/* Policy & AI Engine Configuration Card — visible always */}
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col">
+              <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-blue-500" />
+                  Security Engine Policy
+                </h2>
+              </div>
+              
+              <div className="p-3 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                  <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Analysis Strategy</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveOllamaConfig('HYBRID_HEURISTIC')}
+                      disabled={savingConfig}
+                      className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
+                        ollamaConfig.evaluationMode === 'HYBRID_HEURISTIC'
+                          ? 'bg-indigo-950/40 border-indigo-700 text-indigo-400 hover:bg-indigo-900 hover:text-white'
+                          : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
+                      }`}
+                    >
+                      HYBRID
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveOllamaConfig('PURE_OLLAMA')}
+                      disabled={savingConfig}
+                      className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
+                        ollamaConfig.evaluationMode === 'PURE_OLLAMA'
+                          ? 'bg-amber-950/40 border-amber-700 text-amber-400 hover:bg-amber-900 hover:text-white'
+                          : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
+                      }`}
+                    >
+                      PURE OLLAMA
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] font-mono text-zinc-500 uppercase">Ollama Endpoint</label>
+                    <input 
+                      type="text"
+                      value={customEndpoint}
+                      onChange={(e) => setCustomEndpoint(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[8px] font-mono text-zinc-500 uppercase">Model Name</label>
+                    <select
+                      value={['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) ? customModel : 'custom'}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'custom') {
+                          setCustomModel('');
+                        } else {
+                          setCustomModel(val);
+                        }
+                      }}
+                      className="bg-zinc-950 border border-zinc-800 px-1 py-0.5 text-[8px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 rounded-none cursor-pointer mb-1"
+                    >
+                      <option value="llama3" className="bg-[#09090b]">llama3</option>
+                      <option value="qwen2.5-coder:7b" className="bg-[#09090b]">qwen2.5-coder:7b</option>
+                      <option value="mistral" className="bg-[#09090b]">mistral</option>
+                      <option value="gemma" className="bg-[#09090b]">gemma</option>
+                      <option value="phi3" className="bg-[#09090b]">phi3</option>
+                      <option value="custom" className="bg-[#09090b]">Custom Model...</option>
+                    </select>
+                    
+                    {(!['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) || customModel === '') && (
+                      <input 
+                        type="text"
+                        value={customModel}
+                        onChange={(e) => setCustomModel(e.target.value)}
+                        placeholder="Type custom model name..."
+                        className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 animate-fadeIn"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[8px] font-mono text-zinc-500 uppercase">Sensitive File Patterns (comma-separated)</label>
+                  <input 
+                    type="text"
+                    value={customPatterns}
+                    onChange={(e) => setCustomPatterns(e.target.value)}
+                    placeholder="e.g. payroll, credential, secret, .env"
+                    className="bg-zinc-950 border border-zinc-800 px-1.5 py-1 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
+                  />
+                </div>
+
+                {connectionStatus.status !== 'idle' && (
+                  <div className={`text-[9px] font-mono p-1.5 border leading-relaxed ${
+                    connectionStatus.status === 'success'
+                      ? 'bg-green-950/20 border-green-900 text-green-400'
+                      : 'bg-red-950/20 border-red-900 text-red-400'
+                  }`}>
+                    {connectionStatus.status === 'success' ? '✔ ' : '✘ '} {connectionStatus.message}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleSaveOllamaConfig()}
+                  disabled={savingConfig}
+                  className="w-full bg-zinc-950 border border-zinc-800 text-[8px] font-mono py-1 text-zinc-400 hover:border-zinc-600 hover:text-white transition-colors cursor-pointer"
+                >
+                  {savingConfig ? 'APPLYING CONFIG...' : 'APPLY LOCAL MODEL CONFIG'}
+                </button>
+              </div>
+            </div>
 
           </div>
 

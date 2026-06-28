@@ -9,6 +9,7 @@ export interface Tenant {
   EvaluationMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA';
   OllamaEndpoint?: string;
   OllamaModel?: string;
+  SensitiveFilePatterns?: string[];
 }
 
 export interface Employee {
