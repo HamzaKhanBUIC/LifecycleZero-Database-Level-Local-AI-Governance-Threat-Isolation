@@ -2,6 +2,7 @@ import { AgentTelemetry } from "./types";
 import { GoogleGenAI } from "@google/genai";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 import { env } from "./env";
+import { getTenantOllamaConfig } from "./dao";
 
 // Bypass local corporate proxy TLS issues only in development
 if (process.env.NODE_ENV === "development") {
@@ -184,12 +185,10 @@ Respond ONLY in JSON format:
   return safeParseJSON(response.text);
 }
 
-const OLLAMA_API_URL = env("OLLAMA_API_URL", "http://localhost:11434/api/generate");
-
 /**
  * Sends telemetry to a local Ollama instance for privacy-first evaluation.
  */
-async function evaluateWithOllama(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
+async function evaluateWithOllama(telemetry: AgentTelemetry, endpoint?: string, model?: string): Promise<RiskEvaluation> {
   const prompt = `You are a Zero-Trust Agentic Security AI.
 Evaluate the following telemetry from an employee's machine.
 Determine if the local AI model is accessing highly sensitive company data or behaving suspiciously.
@@ -203,13 +202,17 @@ Telemetry Data:
 
 Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITICAL", "reasoning": "1 sentence explanation."}`;
 
-  const response = await fetch(OLLAMA_API_URL, {
+  const host = endpoint || env("OLLAMA_HOST", "http://localhost:11434");
+  const modelName = model || env("OLLAMA_MODEL", "llama3");
+  const apiURL = `${host.replace(/\/$/, "")}/api/generate`;
+
+  const response = await fetch(apiURL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: env("OLLAMA_MODEL", "llama3"),
+      model: modelName,
       prompt: prompt,
       format: "json",
       stream: false
@@ -229,25 +232,17 @@ Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITI
  * Main evaluation router. Tries local signature matching first, then falls back to local Ollama.
  */
 export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
+  const tenantId = telemetry.PK ? telemetry.PK.split("#")[1] : "org_demo_123";
+  const config = await getTenantOllamaConfig(tenantId);
+  const evaluationMode = config.evaluationMode;
+
   const processLower = telemetry.ProcessName.toLowerCase();
   const files = telemetry.FilesAccessed || [];
   const cpu = telemetry.CpuUsage || 0;
   const egress = telemetry.NetworkEgress || 0;
 
   // =========================================================================
-  // TIER 1: DETERMINISTIC BYPASS (Zero-Cost Filter)
-  // =========================================================================
-  if (files.length === 0) {
-    if (cpu < 80 && egress < 100) {
-      return {
-        riskLevel: "SAFE",
-        reasoning: "Tier 1: No file access events detected. Host resource usage behaves within normal operational parameters."
-      };
-    }
-  }
-
-  // =========================================================================
-  // TIER 2: PATH & PROCESS SIGNATURE MATCHER (Static Rule Filtering)
+  // COMMON HEURISTIC VARIABLES
   // =========================================================================
   const sensitivePatterns = [
     "auth_tokens", "payroll", "credential", "secret", "password", 
@@ -270,49 +265,89 @@ export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<
   const isAiProcess = knownAiProcesses.some(proc => processLower.includes(proc));
   const isDevTool = developerTools.some(proc => processLower.includes(proc));
 
-  // Case A: Known local LLM runner reading a sensitive file -> CRITICAL threat
-  if (isAiProcess && hasSensitiveFile) {
-    const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
-    return {
-      riskLevel: "CRITICAL",
-      reasoning: `Tier 2 Signature Match: Unauthorized local AI model '${telemetry.ProcessName}' accessed restricted data file '${matchedFile}'. Immediate containment required.`
-    };
+  // =========================================================================
+  // TIER 1: DETERMINISTIC BYPASS (Zero-Cost Filter)
+  // =========================================================================
+  if (files.length === 0) {
+    if (cpu < 80 && egress < 100) {
+      return {
+        riskLevel: "SAFE",
+        reasoning: "Tier 1: No file access events detected. Host resource usage behaves within normal operational parameters."
+      };
+    }
   }
 
-  // Case B: Approved developer tool / agent reading a sensitive configuration/secret -> WARNING threat
-  if (isDevTool && hasSensitiveFile) {
-    const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
-    return {
-      riskLevel: "WARNING",
-      reasoning: `Tier 2 Signature Match: Developer tool / coding agent '${telemetry.ProcessName}' accessed sensitive config file '${matchedFile}'. Flagged for compliance review.`
-    };
-  }
+  if (evaluationMode === "HYBRID_HEURISTIC") {
+    // =========================================================================
+    // TIER 2: PATH & PROCESS SIGNATURE MATCHER (Static Rule Filtering)
+    // =========================================================================
+    // Case A: Known local LLM runner reading a sensitive file -> CRITICAL threat
+    if (isAiProcess && hasSensitiveFile) {
+      const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
+      return {
+        riskLevel: "CRITICAL",
+        reasoning: `Tier 2 Signature Match: Unauthorized local AI model '${telemetry.ProcessName}' accessed restricted data file '${matchedFile}'. Immediate containment required.`
+      };
+    }
 
-  // Case C: Developer tool accessing benign project/source files -> SAFE
-  if (isDevTool && !hasSensitiveFile) {
-    return {
-      riskLevel: "SAFE",
-      reasoning: `Tier 2 Signature Match: Sanctioned developer operation verified for '${telemetry.ProcessName}'.`
-    };
-  }
+    // Case B: Approved developer tool / agent reading a sensitive configuration/secret -> WARNING threat
+    if (isDevTool && hasSensitiveFile) {
+      const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
+      return {
+        riskLevel: "WARNING",
+        reasoning: `Tier 2 Signature Match: Developer tool / coding agent '${telemetry.ProcessName}' accessed sensitive config file '${matchedFile}'. Flagged for compliance review.`
+      };
+    }
 
-  // Case D: Completely benign process accessing standard files
-  if (!isAiProcess && !isDevTool && !hasSensitiveFile) {
-    return {
-      riskLevel: "SAFE",
-      reasoning: `Tier 2: Benign process '${telemetry.ProcessName}' accessing standard files.`
-    };
+    // Case C: Developer tool accessing benign project/source files -> SAFE
+    if (isDevTool && !hasSensitiveFile) {
+      return {
+        riskLevel: "SAFE",
+        reasoning: `Tier 2 Signature Match: Sanctioned developer operation verified for '${telemetry.ProcessName}'.`
+      };
+    }
+
+    // Case D: Completely benign process accessing standard files
+    if (!isAiProcess && !isDevTool && !hasSensitiveFile) {
+      return {
+        riskLevel: "SAFE",
+        reasoning: `Tier 2: Benign process '${telemetry.ProcessName}' accessing standard files.`
+      };
+    }
   }
 
   // =========================================================================
   // TIER 3: LOCAL AI EVALUATION (Offline Ollama or safe local heuristic fallback)
   // =========================================================================
-  console.log(`[TIER 3] Escalating telemetry for asset ${telemetry.AssetId} to Local Ollama AI...`);
+  console.log(`[TIER 3] Escalating telemetry for asset ${telemetry.AssetId} to Local Ollama AI (Mode: ${evaluationMode})...`);
 
   try {
     // Only attempt local Ollama evaluation to preserve data privacy (no cloud sharing)
-    return await evaluateWithOllama(telemetry);
-  } catch (error) {
+    const rawResult = await evaluateWithOllama(telemetry, config.ollamaEndpoint, config.ollamaModel) as any;
+    
+    // Normalize keys in case local model uses different casing or formatting
+    const rawRisk = rawResult.riskLevel || rawResult.risklevel || rawResult.risk_level || rawResult.risk || "SAFE";
+    const reasoning = rawResult.reasoning || rawResult.reason || "Local AI evaluation complete.";
+
+    let riskLevel: 'SAFE' | 'WARNING' | 'CRITICAL' = "SAFE";
+    const normalizedRaw = String(rawRisk).toUpperCase();
+    if (normalizedRaw.includes("CRITICAL")) {
+      riskLevel = "CRITICAL";
+    } else if (normalizedRaw.includes("WARNING")) {
+      riskLevel = "WARNING";
+    } else if (normalizedRaw.includes("SAFE")) {
+      riskLevel = "SAFE";
+    }
+
+    return {
+      riskLevel,
+      reasoning
+    };
+  } catch (error: any) {
+    if (evaluationMode === "PURE_OLLAMA") {
+      throw new Error(`Local Ollama is offline or unreachable at '${config.ollamaEndpoint}'. Please start Ollama and run 'ollama run ${config.ollamaModel}' first.`);
+    }
+
     console.warn("⚠️ Local Ollama evaluation failed. Falling back to local offline heuristic...", error);
     
     // Heuristic safe fallback if Ollama is offline/unreachable
