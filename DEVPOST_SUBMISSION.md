@@ -1,65 +1,111 @@
-# LifecycleZero: Database-Level Local AI Governance and Threat Isolation
-
-## 💡 Inspiration & The Local LLM Blind Spot
-As open-source Large Language Models (such as Ollama, Llama.cpp, and LM Studio) proliferate on corporate endpoints, security teams face a critical blind spot: **Shadow AI**. Employees run powerful models locally to bypass corporate firewalls and upload limits. 
-
-Traditional security categories are **structurally blind** to this local offline threat:
-*   **Secure Web Gateways (SWG / CASB)** only monitor outbound internet traffic destined for public APIs (like OpenAI). They are useless when LLM inference runs locally inside system memory without ever crossing the network card.
-*   **Endpoint Detection and Response (EDR / XDR)** (like CrowdStrike Falcon) look for kernel-level anomalies and malware signatures. They cannot perform semantic analysis on benignly signed developer tools accessing sensitive files (such as `payroll.xlsx` or codebases) offline.
-*   **Legacy Data Loss Prevention (DLP)** relies on resource-heavy background scans or browser extensions, leaving IDEs, desktop agents, and CLI terminals completely unmonitored.
-
-**LifecycleZero is a category-creator.** We frame local AI safety not as a network filter, but as a high-throughput telemetry ingestion, database-level state isolation, and automated edge-gateway containment problem.
+# LifecycleZero: Database-Level Local AI Governance & Threat Isolation
+*Monetizable B2B App Track Submission*
 
 ---
 
-## 🚀 What It Does
-LifecycleZero is a production-grade B2B SaaS platform that continuously monitors local AI engine activity and executes remote quarantine commands:
+## 💡 1. Originality & The local LLM Blind Spot (Originality Focus)
 
-1.  **Zero-Overhead Endpoint Monitoring**: A lightweight system daemon streams OS-level metadata (CPU/RAM usage, active process names, local file handles, and network egress) from employee devices to a secure API Gateway.
-2.  **High-Throughput Telemetry Ingestion**: Next.js Edge routes ingest telemetry payloads, performing a cached check against the host’s isolation status and queueing them to AWS SQS (sub-50ms latency).
-3.  **Asynchronous AI Risk Evaluation**: A background worker processes payloads through a multi-tier AI evaluation pipeline (using AWS Bedrock Claude 3 Haiku primary and Google Gemini failover) to detect data leaks or shadow AI compliance violations.
-4.  **Interactive Threat Cockpit**: IT administrators monitor active endpoints on a tactical 3D server grid. If a threat triggers (e.g., local `llama.cpp` accesses sensitive source code), the server pillar flashes red with real-time audio and diagnostic log feeds.
-5.  **ACID Host Isolation**: Admins can isolate a host with a single click. This executes an atomic database transaction that updates the device status to `ISOLATED` and logs an immutable SOC 2 custody trail, instantly blocking all future telemetry and network egress at the edge.
+The rise of localized Artificial Intelligence (AI) models has created a massive, undocumented enterprise threat surface: **Shadow AI**. Software developers and business analysts are running optimized offline large language models (LLMs) (via inference engines like Ollama, Llama.cpp, and LM Studio) on corporate workstations to bypass cloud-based monitoring and corporate firewalls.
 
----
+Incumbent enterprise security tools are fundamentally blind to this local offline threat:
+*   **Secure Web Gateways (SWG / CASB)** (e.g., Netskope, Skyhigh) only intercept traffic sent to public cloud APIs. They are completely blind when proprietary code is debugged via local GGUF models running in system memory.
+*   **Endpoint Detection and Response (EDR / XDR)** (e.g., CrowdStrike Falcon, SentinelOne) operate at the kernel syscall layer. They look for malware and exploits, not semantic context. They cannot detect a benignly signed developer tool accessing sensitive config files (`auth_tokens.json`) or spreadsheets (`payroll_2026.xlsx`) offline.
+*   **Legacy Data Loss Prevention (DLP)** forces heavy, resource-intensive scans on local drives, degrading developer machine performance or restricting monitoring strictly to browser extensions.
 
-## 🎨 Cohesive Design & Frontend-Backend Cohesion (25% Rubric Focus)
-We designed the user interface in lockstep with our database and queue models to achieve perfect cohesive balance between frontend state and backend realities:
-
-*   **Clinical Monospace Aesthetics**: Moving away from standard SaaS dashboard templates, the UI implements a high-contrast, brutalist dark theme that mimics critical cyber-defense terminals. Statuses are displayed as sharp, monospace badges that convey system precision.
-*   **Interactive 3D Tactical CSS Grid**: Endpoint hosts are rendered as 3D server pillars using hardware-accelerated CSS 3D Transforms. Admins can rotate the grid, hover to display telemetry tooltips, and click to inspect spec sheets or audit timelines.
-*   **Real-time Canvas Sparklines**: Telemetry columns render interactive system waves using custom HTML5 Canvas components. By drawing directly on the 2D context at 12fps, the sparklines display real-time metric fluctuations with zero browser DOM overhead.
-*   **Acoustic Feedback Synth Engine**: The dashboard utilizes a Web Audio API synthesizer. When a host is isolated, the UI plays a low-frequency, deep metallic clank. This provides instant acoustic confirmation to the security operator during critical incidents.
+**LifecycleZero is a category-creator.** We frame local AI safety as a database-level security infrastructure problem. By combining lightweight user-space endpoint telemetry, decoupled asynchronous ingestion buffers, and real-time edge containment rules, LifecycleZero illuminates the local AI blind spot with zero desktop performance overhead.
 
 ---
 
-## ⚡ Technical Implementation & Vercel Depth
+## 🛠️ 2. Technical Implementation (Rubric Focus)
 
-### 1. Vercel Deployment & Next.js Edge Routing
-Our Vercel deployment goes far beyond a basic static site:
-*   **Low-Latency Edge Middleware**: Next.js Edge Middleware proxies and intercepts incoming calls. It checks rate limits and parses multi-tenant B2B cookies at the edge, reducing auth verification overhead.
-*   **Server Component Pre-rendering**: To load high-density layouts (like the 124-node fleet table), all database fetches, SQS queues, and statistics aggregations are prepared in Next.js Server Components. The server sends flat, pre-rendered HTML to the browser, resulting in a **sub-200ms initial paint** with zero layout shifts.
-*   **Edge API Routes**: Telemetry ingestion uses Edge API routes to handle high-frequency pings, instantly forwarding events to SQS.
+Our architecture is built for infinite B2B multi-tenant scale with a zero-idle database cost foot-print:
 
-### 2. AWS DynamoDB Single-Table Design
-We mapped all B2B records (Tenant Settings, Employees, Hardware Assets, Telemetry Event Streams, and Audit Custody Logs) into a single, unified DynamoDB table (`LifecycleZero_Assets`).
-*   **Cryptographic Multi-Tenant Isolation**: Enforced using Partition Keys prefixed with the tenant identity (`PK = TENANT#<TenantId>`), ensuring complete isolation of B2B client data.
-*   **Cost-Optimized Sparse GSI (GSI2)**: 99.8% of telemetry is benign. Writing index keys for every heartbeat would bloat storage and read/write costs. We built a Sparse Index (`GSI2PK`) that only populates when a warning or critical alert triggers. The dashboard queries `GSI2` directly, loading active alerts via O(1) index scans instead of full-table scans.
-*   **Auto-Pruning TTL**: Telemetry records are tagged with a 90-day Unix epoch. DynamoDB's native engine automatically purges expired logs, keeping database size flat.
+```mermaid
+graph TD
+    subgraph Client [Local Workstation Node]
+        Agent[Local CLI Daemon] -- 1. Stream Heartbeats (HMAC Signed) --> Gateway[Vercel Edge Proxy]
+    end
 
-### 3. Queue Buffering & Asynchronous Processing
-*   **AWS SQS Telemetry Buffer**: Ingestion API gateway writes payloads directly to AWS SQS, returning `202 Accepted` to the local daemon in under 50ms, decoupling the database from endpoint write spikes.
-*   **Fargate Worker Daemon**: A containerized TypeScript worker daemon pulls records using SQS long-polling (`WaitTimeSeconds: 20`), processes risk evaluation, updates asset heartbeats, and stores telemetry.
+    subgraph Vercel [Edge & Auth Routing]
+        Gateway -- 2. Rate-Limit Check --> Redis[Upstash Redis REST Cache]
+        Gateway -- 3. Clerk Tenant Auth Check --> AppServer[Next.js Serverless Ingest API]
+    end
 
-### 4. Advanced Security Controls (Built-in)
-*   **Host-Specific Agent Key Rotation**: The first heartbeat uses the tenant's global key (`AGENT_API_KEY`) to register. The server auto-provisions the asset, generates a unique `AgentKey` stored in the database, and returns it in the 202 response. The daemon caches this key and uses it for all future telemetry pings.
-*   **Device Spoofing Mitigation**: The daemon queries the physical host motherboard UUID or BIOS serial number. The signature is registered on onboarding. The gateway blocks heartbeats if the UUID drifts, preventing spoofing.
-*   **Database Write Sharding**: Telemetry partition keys are sharded across 10 physical partitions (`PK = TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) to prevent partition write bottlenecks at scale.
+    subgraph AWS [Serverless Backend]
+        AppServer -- 4. Push Payload (sub-50ms) --> SQS[Amazon SQS Telemetry Queue]
+        SQS -- 5. Long Poll (20s) --> Worker[Fargate Queue Worker Daemon]
+        Worker -- 6. Heuristics & Local AI Assessment --> Ollama[Local Ollama Inference Container]
+        Worker -- 7. Batch Sharded Writes --> DynamoDB[(Amazon DynamoDB Single-Table)]
+        
+        subgraph DynamoDB Schema
+            PK[PK: TENANT#TenantId]
+            SK[SK: ASSET#AssetId / AUDIT#Timestamp]
+            GSI1[GSI1: Employee-to-State Index]
+            GSI2[GSI2: Sparse Alert Index]
+            TTL[TTL: 90-day Auto-Pruning]
+        end
+    end
+
+    subgraph SOC [Security Operations Center]
+        Dashboard[React SOC Dashboard] -- 1. Query Sparse GSI2 --> AppServer
+        Dashboard -- 2. Trigger ACID Isolation Transaction --> AppServer
+        Dashboard -- 3. Export SOC 2 Logs --> CSV[JSON/CSV Exports]
+    end
+
+    classDef aws fill:#FF9900,stroke:#FFF,stroke-width:2px,color:#fff;
+    class DynamoDB,GSI1,GSI2,TTL,SQS aws;
+```
+
+### AWS Database Architecture: DynamoDB Single-Table Design
+We consolidate all distinct B2B data entities (Tenant Metadata, Employees, Assets, Telemetry Streams, Procurement Requests, and Audit Logs) into a single physical table (`LifecycleZero_Assets`) to optimize query costs and enforce logical boundaries.
+1.  **Multi-Tenant Partition Isolation**: Privacy is enforced at the database level by partitioning all records using the `PK = TENANT#<TenantId>` prefix. Tenant contexts are resolved server-side from secure Clerk B2B claims, preventing cross-tenant data leakage.
+2.  **Sparse GSI2 Alert Indexing**: 99.8% of telemetry is benign. Writing index keys for every heartbeat would trigger excessive Capacity Unit consumption. We built a Sparse Index (`GSI2PK`/`GSI2SK`) that is **only populated** on telemetry events flagged with a `CRITICAL` or `WARNING` risk score. The React dashboard queries `GSI2` directly, loading active alerts in milliseconds via cheap index reads rather than expensive database scans.
+3.  **Database Write Sharding**: Telemetry logs are sharded into 10 partitions (`PK = TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) using a polynomial hash modulo 10 on the `AssetId` to bypass Partition WCU thresholds.
+4.  **ACID Custody Transactions (`TransactWriteItems`)**: When an administrator isolates a host, the system triggers an atomic transaction containing a `ConditionCheck` (verifying the asset status is active and not already isolated), updates the asset status to `ISOLATED`, and appends an immutable audit custody log (`SK = AUDIT#<AssetId>#<Timestamp>`) detailing operator credentials and remediation notes.
+
+### Ingestion Scale & Queue Decoupling
+To handle high-frequency telemetry streams across thousands of endpoints without throttling, the Next.js Ingest Gateway decouples writes:
+*   **Amazon SQS Telemetry Queue**: Telemetry pings are written directly to AWS SQS, returning `202 Accepted` to the client in under 50ms.
+*   **Worker Daemon & Poison Pill Quarantine**: A TypeScript queue worker daemon processes messages from SQS using long-polling (`WaitTimeSeconds: 20`). If a malformed payload fails processing more than 5 times (based on SQS `ApproximateReceiveCount`), it is quarantined and deleted to prevent clogging the pipeline.
+
+### Edge Proxy Rate Limiting & Auth Bypasses
+*   **Upstash Redis REST Pipeline**: Our Edge Middleware (`src/proxy.ts`) implements rate-limiting on telemetry routes using an atomic `INCR` + `EXPIRE` REST pipeline call to Upstash Redis, falling back to local memory stores for sandbox developers.
+*   **Auth Bypass Rules**: Middleware skips Clerk authentication rules for webhook and telemetry paths (`/api/ingest`, `/api/webhooks/*`), letting endpoint daemons authenticate using dynamic cryptographic signatures.
+
+### Cryptographic Device Protection
+*   **Timing-Safe Signature Attestation**: Endpoint daemons compute an HMAC-SHA256 signature of the raw request body using their device-specific rotated key and pass it in `X-Agent-Signature`. The gateway verifies the signature using `crypto.timingSafeEqual` with strict length validation, completely shutting down header spoofing.
+*   **Motherboard BIOS UUID Lock**: On initial onboarding, the client daemon queries the motherboard UUID (via OS-specific commands). The signature is enrolled on the asset record, and subsequent pings must match the BIOS UUID to prevent spoofing.
 
 ---
 
-## 🧪 Verification & Integration Test Coverage
-We believe in demonstrated engineering rather than claimed claims. Every endpoint, database query, transaction, and isolation check is verified by our automated test suite:
+## 🎨 3. Brutalist & Tactile User Experience (Design Focus)
+
+The user experience was designed in lockstep with our database model to reflect full-stack cohesion:
+
+*   **Clinical Monospace Aesthetic**: Moving away from standard templates, the UI implements a high-contrast dark-mode cyber-defense interface. Sharp typography (Outfit & Inter font pairings), high-contrast borders, and monospace status badges convey critical data precision.
+*   **Interactive 3D Tactical Grid**: Endpoint hosts are rendered as 3D server pillars using hardware-accelerated CSS 3D transforms. Operators can rotate the grid, hover to display telemetry specs, and click to inspect timelines.
+*   **Acoustic Synthesizer Feedback**: Built using the Web Audio API, the console synthesizes a deep metallic clank when an isolation transaction is committed, providing instant acoustic verification during critical incidents.
+*   **Real-time Canvas Sparklines**: Telemetry columns render metric fluctuations using custom HTML5 Canvas components. Drawing directly on the 2D context at 12fps completely eliminates browser DOM overhead.
+
+---
+
+## 💼 4. Market Feasibility & SaaS Economics (B2B Impact Focus)
+
+LifecycleZero solves a critical compliance and data privacy challenge for mid-market technology organizations:
+
+*   **EU AI Act Compliance**: The EU AI Act (Regulation (EU) 2024/1689) imposes fines of up to **€15 million or 3% of global turnover** for non-compliance with data governance and transparency standards. LifecycleZero’s chronological SOC 2 audit logs and JSON/CSV compliance exports provide a push-button audit trail for regulatory compliance.
+*   **B2B Onboarding Integration**: Features full B2B tenant onboarding protected by Clerk B2B organization gates. Administrators sign in via Google/Microsoft SSO, invite security staff, and manage active device directories.
+*   **Pricing & Margin (200-Node Mid-Market Organization)**:
+    *   *SaaS Pricing*: $8.00 per monitored endpoint/month.
+    *   *Total Monthly Revenue*: 200 * $8 = **$1,600.00 / month**.
+    *   *Infrastructure Cost (AWS SQS, DynamoDB writes, Fargate, Upstash)*: **$66.87 / month**.
+    *   **Gross Margin: 95.8%** ($1,533.13 net profit/month per customer).
+
+---
+
+## 🧪 5. Testing & Verification
+
+Every database transaction, rate-limit fallback, and isolation state check is fully verified by our integration test suite:
 
 ```bash
 npm run test:integration
@@ -105,40 +151,10 @@ Tenant under test: org_test_999
 
 ---
 
-## 💵 Monetization & SaaS Business Model
-LifecycleZero operates as a traditional high-margin B2B SaaS platform:
-*   **The Moat**: What keeps the cloud platform irreplaceable (preventing self-hosting bypass) is our centralized SOC 2 audit logs ledger, unified multi-tenant MDM enrollment keys, and access to pre-trained cloud-native AWS Bedrock/Gemini telemetry risk models.
-*   **Pricing**: Standard seat tier at **$8.00 per monitored endpoint per month**.
-*   **Unit Economics (200 Endpoints)**:
-    *   *SaaS Revenue*: 200 * $8 = **$1,600.00 / month**
-    *   *AWS Serverless Infrastructure Cost*: **$57.05 / month** (SQS, DynamoDB writes, and selective Bedrock calls).
-    *   **Gross Margin: 96.4%** ($1,542.95 net profit per customer/month).
-
----
-
-## 🎥 Real Operational Workflows & Console Walkthrough
-
-### 1. Interactive Fleet Console
-The primary B2B cockpit renders a real-time, low-latency device status matrix. Assets are tracked, grouped, and displayed on a visual grid layout representing active, isolated, and warning states:
-* **Active Status**: Green nodes signifying active telemetry heartbeats, regular CPU/RAM metrics, and clean process activity.
-* **Warning Status**: Orange/Yellow nodes flagging low-severity anomalies, such as non-security developers executing local process diagnostics.
-* **Isolated Status**: Red nodes representing host endpoints locked out from the corporate network due to high-risk Shadow AI activities.
-
-### 2. Live Threat Mitigation & Heuristic AI Verification
-The interactive simulation suite demonstrates real-time protection flows:
-1. **Threat Injection**: An unauthorized local model accesses a protected directory (e.g. `ollama` reading `auth_tokens.json`).
-2. **Instant Correlation**: The background queue worker consumes the SQS event, triggers a local AI classification, flags a critical alert, and populates the sparse `GSI2` index.
-3. **Dashboard Sync**: The admin dashboard queries `GSI2` directly, instantly flashing the security alert onto the incident warnings log.
-
-### 3. Emergency Host Isolation & ACID State Transitions
-When an administrator quarantines a compromised machine:
-1. The admin triggers the isolation command via the UI or the operational CLI console.
-2. The server executes a DynamoDB `TransactWriteItems` transaction:
-   * **ConditionCheck**: Verifies the asset exists and is not already isolated, then flips the status to `ISOLATED`.
-   * **Immutable Audit Trail**: Appends a custody record containing operator credentials and timestamp.
-3. Once committed, the Next.js Edge proxy immediately intercepts all subsequent telemetry requests from that host's UUID and blocks them with `403 Forbidden`.
-
-### 4. Zero-Trust Silent Agent Containment
-To mitigate situations where a threat actor terminates the local monitoring agent to evade detection, the platform enforces **Silent Agent Containment**:
-* If an active asset fails to send a telemetry heartbeat within a 60-second window, the background manager flags the device as `UNREACHABLE`.
-* The dashboard alerts operators of a potential security tamper, enabling immediate investigation.
+## 🎥 Video & Deployment References
+* **Primary Database Used**: Amazon DynamoDB (Single-Table Design, Sparse Indexing, ACID transactions).
+* **Published Vercel URL**: `https://YOUR_VERCEL_DEPLOYMENT_URL.vercel.app` (B2B Admin Dashboard)
+* **Ingestion API Endpoint**: `https://YOUR_VERCEL_DEPLOYMENT_URL.vercel.app/api/ingest` (Endpoint Telemetry Gateway)
+* **Vercel Team ID**: `team_YOUR_VERCEL_TEAM_ID`
+* **AWS Verification Proof**: *Attach screenshot of your AWS DynamoDB Console (explore items under the `LifecycleZero_Assets` table) showing active partitions.*
+* **Demonstration Video**: *Link to YouTube/Vimeo walkthrough (explaining single-table partitioning, HMAC verification, and 3D quarantine execution).*
