@@ -124,7 +124,8 @@ async function middleware(req: NextRequest) {
   const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
   const isSandbox = isDemoQuery || allowedSandboxTenants.includes(tenantCookie || "");
 
-  const shouldSkipClerk = SKIP_CLERK || isSandbox;
+  const isPublicApi = pathname.startsWith("/api/ingest") || pathname.startsWith("/api/webhooks");
+  const shouldSkipClerk = SKIP_CLERK || isSandbox || isPublicApi;
 
   if (!shouldSkipClerk) {
     const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
