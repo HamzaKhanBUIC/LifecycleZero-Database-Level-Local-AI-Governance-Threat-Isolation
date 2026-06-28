@@ -53,12 +53,12 @@ LifecycleZero operates on a decoupled, event-driven serverless architecture opti
 1. **OS Telemetry Daemon:** A lightweight Node.js script running as a system service. It captures system usage metrics (CPU, RAM, process lists) and reads file events, querying system BIOS variables (`wmic` on Windows, `system_profiler` on macOS) to retrieve the unique motherboard hardware UUID.
 2. **Next.js Edge Ingest API:** Deployed on Vercel's global CDN Edge, this gateway intercepts incoming telemetry. It performs a lightweight, high-speed cache look-up. If the incoming machine's status is `ISOLATED` in the DB, the Edge instantly blocks further requests with a `403 Forbidden` response, preventing compromised endpoints from flooding the queue.
 3. **AWS SQS Telemetry Queue:** If the endpoint is healthy, the Edge Gateway immediately pushes the telemetry payload onto the AWS SQS queue. The API returns an instant `202 Accepted` to the client in under 50ms, separating the ingestion speed from database writing speeds.
-4. **Fargate Queue Worker:** A continuous daemon running in a containerized environment. It pulls events from the SQS queue using long-polling (`WaitTimeSeconds: 20`), runs fast heuristic rule matches, passes anomalous events to AWS Bedrock (Claude 3 Haiku) for behavioral risk scoring, and commits the records to DynamoDB.
+4. **Fargate Queue Worker:** A continuous daemon running in a containerized environment. It pulls events from the SQS queue using long-polling (`WaitTimeSeconds: 20`), runs fast heuristic rule matches, evaluates anomalous events using a local Ollama container (Llama 3) or falls back to local heuristic rules for behavioral risk scoring, and commits the records to DynamoDB.
 
 ### The Single-Table Database Design (AWS DynamoDB)
 All multi-tenant B2B resources—Tenant Metadata, Employees, Assets, Telemetry, and Compliance Audit Logs—are stored in a single table, `LifecycleZero_Assets`, mapped via partition schemas:
 * **Tenant Isolation:** Enforced strictly at the primary key level. All query commands must specify the tenant's partition (`PK = TENANT#<TenantId>`), preventing cross-tenant leakage.
-* **Telemetry Write Sharding:** Telemetry logs are distributed across 10 physical partitions (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) using a random hash. This elevates partition limits to handle tens of thousands of active devices per tenant.
+* **Telemetry Write Sharding:** Telemetry logs are distributed across 10 physical partitions (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) using a deterministic polynomial hash on the AssetId. This ensures that telemetry data for a specific asset is written to the same shard to prevent duplicate key rendering issues while handling tens of thousands of active devices per tenant.
 * **Sparse GSI2 (Dashboard Alert Index):** Benign telemetry logs (99.8% of traffic) do not contain `GSI2PK`/`GSI2SK` fields. The index is only written when a risk is flagged. The React dashboard queries `GSI2` directly, loading active alerts instantly without performing full table scans.
 * **Data Lifecycle Pruning (TTL):** Telemetry records are tagged with a 90-day expiration epoch. DynamoDB's background engine deletes expired records for free, keeping database size flat.
 
@@ -179,10 +179,10 @@ Ensure you are ready to answer the following architectural questions during eval
 ### Q1: "If the local user gets admin rights, they can just kill the daemon."
 * **Mitigation:** In an enterprise production deployment, the client daemon runs as a privileged system daemon (root on macOS/Linux, Windows Service on Windows) pushed silently via Mobile Device Management (MDM) tools like Jamf or Microsoft Intune. If a user forces the daemon offline, our **Silent Agent Detection** logic flags the asset as `UNREACHABLE` on the server-side, triggering alerts. More importantly, our **Two-Way Isolation** blocks the host server-side (Next.js Edge returns 403 Forbidden to any API requests from that machine) even if the local agent is modified.
 
-### Q2: "Is SQS + AWS Bedrock AI processing too slow for real-time isolation?"
+### Q2: "Is SQS + Local AI processing too slow for real-time isolation?"
 * **Mitigation:** LifecycleZero utilizes **Two-Tiered Containment**:
   1. **Tier 1 (Deterministic Fast Path):** The Edge Ingest Gateway runs simple regex heuristics on incoming payloads. If it detects a critical process (like `ollama`) accessing a restricted path, it quarantines the host instantly (<50ms).
-  2. **Tier 3 (Asynchronous AI Path):** Telemetry is sent to SQS where background workers evaluate Bedrock for advanced evasion patterns (e.g., executing a local LLM from a renamed binary) and compile security audit logs.
+  2. **Tier 2 (Asynchronous AI Path):** Telemetry is sent to SQS where background workers query the local Ollama LLM container for advanced evasion patterns (e.g., executing a local LLM from a renamed binary) and compile security audit logs.
 
 ### Q3: "Is the AWS SQS queue worker serverless?"
 * **Mitigation:** SQS worker daemons run inside continuous containerized environments (like AWS ECS Fargate). It uses long-polling (`WaitTimeSeconds: 20`) to keep persistent HTTP connections, eliminating serverless cold-start latency.

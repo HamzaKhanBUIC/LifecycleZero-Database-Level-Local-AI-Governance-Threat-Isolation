@@ -60,7 +60,7 @@ However, **the core serverless architecture is NOT limited to 200 users.** Becau
       ▼ (Continuous Long-Polling Fargate Workers)
 [Batch SQS Worker]
       │
-      ├─► (Risk AI Evaluation via Bedrock Batching)
+      ├─► (Risk AI Evaluation via Local Ollama / Heuristics)
       │
       └─► (Writes Sharded Telemetry to Shard Partitions in DynamoDB)
 ```

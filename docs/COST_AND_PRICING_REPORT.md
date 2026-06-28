@@ -20,13 +20,12 @@ Below is the cost breakdown for a mid-market customer with **200 monitored endpo
 *   **Database Writes**: 200 endpoints * 1,440 pings/day * 30 days = 8.64 million writes.
 *   **Cost**: `8.64 * $1.25` = **$10.80 / month**
 
-### 3. Risk AI Heuristics Evaluation (AWS Bedrock Claude 3 Haiku)
-*   **Pricing**: $0.25 / million input tokens, $1.25 / million output tokens.
-*   **Rule-Filter Filtering**: We only trigger Bedrock evaluation on events flagged by local edge rules as `WARNING` or `CRITICAL` (estimated at 0.1% of traffic).
-*   **AI Runs**: 103.68 million * 0.1% = 103,680 runs.
-*   **Cost**: ~200 tokens/run = 20.7 million tokens = **$5.18 / month**
+### 3. Risk AI Heuristics Evaluation (Local Ollama Container Hosting)
+*   **Hosting**: We run dedicated container instances of Ollama (Llama 3) inside AWS ECS Fargate or local hypervisors.
+*   **Data Privacy**: All telemetry and file-access evaluations run 100% locally. Zero tokens are sent to external cloud APIs, eliminating external API charges and ensuring absolute employee data privacy.
+*   **Cost**: Fixed hosting runtime cost of **$15.00 / month** per 200 endpoints.
 
-### ⚠️ Total monthly Infrastructure Cost: ~$57.05 / month
+### ⚠️ Total monthly Infrastructure Cost: ~$66.87 / month
 
 ---
 
@@ -35,8 +34,8 @@ LifecycleZero's pricing model is a simple, predictable endpoint subscription:
 
 *   **SaaS List Price**: $8.00 per monitored workstation endpoint per month.
 *   **Total Monthly Revenue (200 Endpoints)**: 200 * $8.00 = **$1,600.00 / month**
-*   **Monthly Infrastructure Cost**: **$57.05 / month**
-*   **Gross Profit Margin**: **96.4%**!
+*   **Monthly Infrastructure Cost**: **$66.87 / month**
+*   **Gross Profit Margin**: **95.8%**!
 
 This massive profit margin is the primary business advantage of our SQS-decoupled, sparse-indexed serverless architecture.
 

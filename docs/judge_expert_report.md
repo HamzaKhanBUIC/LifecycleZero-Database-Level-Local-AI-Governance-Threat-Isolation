@@ -114,7 +114,7 @@ Ingestion is decoupled to handle high-frequency telemetry logs across thousands 
 [Telemetry Queue Worker]
       │
       ▼
-[AWS Bedrock Risk Evaluation] (Claude 3 Haiku / Failovers: Gemini, Groq, Ollama)
+[Local AI Risk Evaluation] (Local Ollama / Heuristics)
       │
       ▼
 [DynamoDB Alerts & Logs Update]

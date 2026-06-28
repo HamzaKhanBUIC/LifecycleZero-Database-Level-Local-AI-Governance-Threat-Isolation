@@ -17,7 +17,7 @@ This is the recommended path for a rapid walk-through of the security cockpit's 
 2. Select a threat scenario (e.g. `llama.cpp Accessing auth_tokens.json (Critical)`).
 3. Click **RUN THREAT SIMULATION**.
 4. The simulated local terminal will output the telemetry logs, SQS queuing result, and AI risk analysis in real time. An alarm alert will trigger.
-5. In the **Security Incident Feed**, you will see the active threat step-by-step audit, showing the AI reasoning from AWS Bedrock / Gemini.
+5. In the **Security Incident Feed**, you will see the active threat step-by-step audit, showing the AI reasoning from local Ollama / offline heuristics.
 
 ### Step 3: Trigger Device Isolation
 1. Click **ISOLATE HOST** on the incident card.
@@ -42,9 +42,9 @@ This path verifies the production-grade multi-tenant B2B onboarding, custom Cler
 1. Upon logging in, you will notice your organization's Fleet Directory is **completely empty** (the real environment starts blank, as requested by the client).
 2. **Path 1 (Mock Initializer)**: Click the **INITIALIZE THREAT GRID** button inside the Tactical Grid card. This will populate your organization's database partition with a fresh cohort of assets, allowing you to run local simulations.
 3. **Path 2 (Real Device Integration)**: Connect your own computer!
-   - Run the following command in your terminal:
+   - Run the following command in your terminal (replacing `org_your_org_id` with your Clerk Organization ID):
      ```bash
-     npm run agent MY-LAPTOP
+     TENANT_ID=org_your_org_id npm run agent MY-LAPTOP
      ```
    - The daemon will boot, register itself dynamically at `/api/ingest`, auto-enroll your laptop into the database fleet, and stream local processes, CPU, RAM, and network egress telemetry directly to your admin console!
    - Navigate to `/dashboard/assets` to view your laptop in the active hardware directory.

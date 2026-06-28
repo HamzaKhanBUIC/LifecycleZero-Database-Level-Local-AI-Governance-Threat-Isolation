@@ -11,7 +11,7 @@ LifecycleZero is an enterprise B2B SaaS platform designed to govern local, decen
 ### The System Archetype (Decoupled SaaS Control Plane)
 *   **The Ingestion Gateway & Dashboard (Next.js & Vercel)**: Serves as the administrative cockpit and API endpoint for telemetry logs.
 *   **Decoupled Telemetry Buffer (AWS SQS)**: Queues high-velocity telemetry logs asynchronously, protecting the database from write lockouts.
-*   **Asynchronous AI Risk Scorer (AWS Bedrock / Gemini)**: Pulls telemetry from the queue, evaluates files accessed against security policies, and flags anomalous behaviors.
+*   **Asynchronous AI Risk Scorer (Local Ollama / Heuristics)**: Pulls telemetry from the queue, evaluates files accessed against security policies, and flags anomalous behaviors.
 *   **Serverless Database Partitioning (AWS DynamoDB)**: Stores fleet inventory, threat records, and SOC 2 custody logs using a cost-efficient Single-Table Design.
 *   **The Monitoring Agent (Node.js Daemon)**: Lightweight, low-overhead daemon running on employee devices, streaming process metadata.
 
@@ -57,7 +57,7 @@ To process heartbeats from thousands of endpoints without driving up database us
         ▼ (Continuous long-polling container worker)
 [Fargate SQS Queue Worker]
         │
-        ├─► Evaluates risk via Bedrock AI (Claude 3 Haiku)
+        ├─► Evaluates risk via Local Ollama / Heuristics
         ├─► Writes telemetry metrics to sharded table partition
         └─► Updates Asset LastHeartbeat and logs alert to Sparse GSI2
 ```
@@ -152,10 +152,10 @@ LifecycleZero is highly profitable due to its serverless, pay-per-use backend ar
 *   **Infrastructure Costs**:
     *   *AWS SQS Ingestion Buffer*: 103.68M pings/mo = **$41.07 / month**
     *   *AWS DynamoDB (Coalesced writes + TTL)*: **$10.80 / month**
-    *   *AWS Bedrock AI Evaluation (Claude 3 Haiku on 0.1% traffic)*: **$5.18 / month**
-    *   **Total Infrastructure Cost: $57.05 / month**
+    *   *Local Ollama Container Hosting (Llama 3 local instances)*: **$15.00 / month**
+    *   **Total Infrastructure Cost: $66.87 / month**
 *   **B2B SaaS Revenue**:
     *   *Subscription Price*: $8.00 per monitored endpoint per month.
     *   *Gross Monthly Revenue (200 Endpoints)*: 200 * $8.00 = **$1,600.00 / month**
 *   **Profit Margins**:
-    *   **96.4% Gross Profit Margin** ($1,542.95 net profit per month per customer).
+    *   **95.8% Gross Profit Margin** ($1,533.13 net profit per month per customer).

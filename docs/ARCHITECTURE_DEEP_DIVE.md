@@ -72,10 +72,10 @@ sequenceDiagram
 #### Objection 1: "If the local user gets admin rights, they can just kill the daemon."
 *   **Mitigation**: In production, the daemon runs as a privileged system service (root daemon / Windows Service) deployed via MDM. If a user forces it offline, our **Silent Agent Detection** logic flags the host as `UNREACHABLE` on the server-side, triggering alerts for the security team. Furthermore, our **Two-Way Isolation** blocks the host server-side (Next.js Edge returns 403 Forbidden to any API requests from that machine) even if the local agent is modified.
 
-#### Objection 2: "Is SQS + AWS Bedrock AI processing too slow for real-time isolation?"
+#### Objection 2: "Is SQS + Local AI processing too slow for real-time isolation?"
 *   **Mitigation**: We implement **Two-Tiered Containment**:
     1.  **Tier 1 (Deterministic Fast Path)**: The Edge Gateway runs fast regex/heuristic checks on incoming telemetry. If it sees a critical process accessing a known sensitive file, it quarantines the host instantly (<50ms).
-    2.  **Tier 2 (Asynchronous AI Path)**: Telemetry is queued on SQS and evaluated by Bedrock (Claude 3 Haiku) to detect evasion techniques (e.g. LLM execution under a renamed binary) and compile compliance logs.
+    2.  **Tier 2 (Asynchronous AI Path)**: Telemetry is queued on SQS and evaluated by a local Ollama LLM container to detect evasion techniques (e.g. LLM execution under a renamed binary) and compile compliance logs.
 
 #### Objection 3: "Is the AWS SQS queue worker serverless?"
 *   **Mitigation**: SQS worker daemons run inside continuous containerized environments (like AWS ECS Fargate). It uses long-polling (`WaitTimeSeconds: 20`) to keep persistent HTTP connections, eliminating serverless cold-start latency.
