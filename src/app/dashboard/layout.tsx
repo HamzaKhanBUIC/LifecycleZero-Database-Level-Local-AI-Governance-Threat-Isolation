@@ -29,6 +29,9 @@ export default async function DashboardLayout({
     redirect("/");
   }
 
+  const isDemoMode = tenantId === "org_demo_123";
+  const securityHref = isDemoMode ? "/security?demo=true" : "/security";
+
   return (
     <div className="flex min-h-screen bg-black text-zinc-100 font-mono">
       {/* Sidebar */}
@@ -50,14 +53,14 @@ export default async function DashboardLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-2">
+        <nav className="flex-1 flex flex-col gap-1.5">
           <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-2">Workspace</p>
           <Link
             href="/dashboard"
             className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
           >
             <LayoutDashboard className="h-4 w-4" />
-            OVERVIEW
+            FLEET OVERVIEW
           </Link>
           <Link
             href="/dashboard/assets"
@@ -75,13 +78,30 @@ export default async function DashboardLayout({
           </Link>
           <div className="pt-4 mt-4 border-t border-zinc-900">
             <Link
-              href="/security"
+              href={securityHref}
               className="flex items-center gap-3 px-3 py-2 rounded text-xs font-bold text-rose-500 hover:text-rose-400 hover:bg-rose-950/20 transition border border-dashed border-rose-900/40"
             >
               <ShieldAlert className="h-4 w-4" />
               AI THREAT CONSOLE
             </Link>
           </div>
+          {isDemoMode && (
+            <div className="pt-4 mt-4 border-t border-zinc-900 flex flex-col gap-1.5">
+              <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-1">Demo Controls</p>
+              <Link
+                href="/security"
+                className="flex items-center gap-3 px-3 py-2 rounded text-[10px] font-mono text-rose-400 hover:text-white hover:bg-rose-950/20 transition border border-transparent hover:border-zinc-800"
+              >
+                PROCEED TO ENTERPRISE
+              </Link>
+              <Link
+                href="/"
+                className="flex items-center gap-3 px-3 py-2 rounded text-[10px] font-mono text-zinc-500 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
+              >
+                RETURN HOME
+              </Link>
+            </div>
+          )}
         </nav>
 
         {/* User profile section */}
