@@ -433,3 +433,67 @@ export async function createEmployee(tenantId: string, employee: Omit<Employee, 
 
   return item;
 }
+
+export interface TenantOllamaConfig {
+  evaluationMode: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA';
+  ollamaEndpoint: string;
+  ollamaModel: string;
+}
+
+/**
+ * Get active Ollama configuration for a tenant
+ */
+export async function getTenantOllamaConfig(tenantId: string): Promise<TenantOllamaConfig> {
+  try {
+    const res = await docClient.send(new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" }
+    }));
+    const tenant = res.Item as Tenant | undefined;
+    return {
+      evaluationMode: tenant?.EvaluationMode || 'HYBRID_HEURISTIC',
+      ollamaEndpoint: tenant?.OllamaEndpoint || env("OLLAMA_HOST", "http://localhost:11434"),
+      ollamaModel: tenant?.OllamaModel || env("OLLAMA_MODEL", "llama3")
+    };
+  } catch (err) {
+    console.error("Failed to get tenant Ollama config:", err);
+    return {
+      evaluationMode: 'HYBRID_HEURISTIC',
+      ollamaEndpoint: env("OLLAMA_HOST", "http://localhost:11434"),
+      ollamaModel: env("OLLAMA_MODEL", "llama3")
+    };
+  }
+}
+
+/**
+ * Update Ollama configuration for a tenant
+ */
+export async function updateTenantOllamaConfig(
+  tenantId: string,
+  config: Partial<TenantOllamaConfig>
+): Promise<void> {
+  const expressions: string[] = [];
+  const attributeValues: any = {};
+
+  if (config.evaluationMode !== undefined) {
+    expressions.push("EvaluationMode = :mode");
+    attributeValues[":mode"] = config.evaluationMode;
+  }
+  if (config.ollamaEndpoint !== undefined) {
+    expressions.push("OllamaEndpoint = :endpoint");
+    attributeValues[":endpoint"] = config.ollamaEndpoint;
+  }
+  if (config.ollamaModel !== undefined) {
+    expressions.push("OllamaModel = :model");
+    attributeValues[":model"] = config.ollamaModel;
+  }
+
+  if (expressions.length === 0) return;
+
+  await docClient.send(new UpdateCommand({
+    TableName: TABLE_NAME,
+    Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" },
+    UpdateExpression: `SET ${expressions.join(", ")}`,
+    ExpressionAttributeValues: attributeValues
+  }));
+}

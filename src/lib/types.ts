@@ -6,6 +6,9 @@ export interface Tenant {
   CreatedAt: string;
   Status: 'ACTIVE' | 'SUSPENDED';
   Plan: 'FREE_TIER' | 'ENTERPRISE';
+  EvaluationMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA';
+  OllamaEndpoint?: string;
+  OllamaModel?: string;
 }
 
 export interface Employee {
