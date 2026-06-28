@@ -172,6 +172,10 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);
   const [customModel, setCustomModel] = useState(ollamaConfig.ollamaModel);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{
+    status: 'idle' | 'success' | 'error';
+    message: string;
+  }>({ status: 'idle', message: '' });
 
   useEffect(() => {
     if (data?.ollamaConfig && lastTenantRef.current !== activeTenantId) {
@@ -183,18 +187,73 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
   const handleSaveOllamaConfig = async (newMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA') => {
     setSavingConfig(true);
+    setConnectionStatus({ status: 'idle', message: '' });
+
+    const targetMode = newMode || ollamaConfig.evaluationMode;
+
+    // Validate connection if trying to run PURE_OLLAMA or if modifying model configuration explicitly
+    if (targetMode === 'PURE_OLLAMA' || !newMode) {
+      try {
+        const cleanedHost = customEndpoint.replace(/\/$/, "");
+        const tagsRes = await fetch(`${cleanedHost}/api/tags`, { 
+          method: 'GET',
+          signal: AbortSignal.timeout(3000)
+        });
+        
+        if (!tagsRes.ok) {
+          throw new Error(`Endpoint returned status ${tagsRes.status}`);
+        }
+
+        const tagsData = await tagsRes.json();
+        const modelsList = tagsData.models || [];
+        
+        if (customModel && customModel !== '') {
+          const modelExists = modelsList.some((m: any) => 
+            m.name.toLowerCase().includes(customModel.toLowerCase()) || 
+            customModel.toLowerCase().includes(m.name.toLowerCase())
+          );
+          
+          if (!modelExists) {
+            setConnectionStatus({
+              status: 'error',
+              message: `Model '${customModel}' not found on this Ollama instance. Installed models: ${modelsList.map((m: any) => m.name).join(', ') || 'None'}`
+            });
+            setSavingConfig(false);
+            return;
+          }
+        }
+      } catch {
+        setConnectionStatus({
+          status: 'error',
+          message: `Failed to connect to local Ollama at '${customEndpoint}'. Make sure Ollama is running and CORS is enabled.`
+        });
+        setSavingConfig(false);
+        return;
+      }
+    }
+
     try {
       const res = await updateTenantOllamaConfigAction({
-        evaluationMode: (newMode || ollamaConfig.evaluationMode) as 'HYBRID_HEURISTIC' | 'PURE_OLLAMA',
+        evaluationMode: targetMode as 'HYBRID_HEURISTIC' | 'PURE_OLLAMA',
         ollamaEndpoint: customEndpoint,
         ollamaModel: customModel
       });
       if (res.success) {
         lastTenantRef.current = null; // force one-time re-sync from newly saved database config
+        setConnectionStatus({
+          status: 'success',
+          message: targetMode === 'PURE_OLLAMA' 
+            ? `Successfully connected to '${customModel}'!` 
+            : 'Configuration applied successfully.'
+        });
         mutate(['dashboardData', activeTenantId]);
       }
     } catch (err) {
       console.error("Failed to save Ollama config:", err);
+      setConnectionStatus({
+        status: 'error',
+        message: 'Failed to write configuration to database.'
+      });
     } finally {
       setSavingConfig(false);
     }
@@ -1260,6 +1319,16 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                           )}
                         </div>
                       </div>
+
+                      {connectionStatus.status !== 'idle' && (
+                        <div className={`text-[9px] font-mono p-1.5 border leading-relaxed ${
+                          connectionStatus.status === 'success'
+                            ? 'bg-green-950/20 border-green-900 text-green-400'
+                            : 'bg-red-950/20 border-red-900 text-red-400'
+                        }`}>
+                          {connectionStatus.status === 'success' ? '✔ ' : '✘ '} {connectionStatus.message}
+                        </div>
+                      )}
 
                       <button
                         onClick={() => handleSaveOllamaConfig()}
