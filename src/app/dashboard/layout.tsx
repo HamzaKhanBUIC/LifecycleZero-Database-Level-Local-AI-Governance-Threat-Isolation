@@ -123,9 +123,11 @@ export default async function DashboardLayout({
             
             {hasClerk ? (
               <SignOutButton redirectUrl="/">
-                <button className="w-full text-left flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800 cursor-pointer">
-                  <LogOut className="h-4 w-4" />
-                  LOG OUT
+                <button className="w-full text-left rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800 cursor-pointer">
+                  <span className="flex items-center gap-3 px-3 py-2">
+                    <LogOut className="h-4 w-4" />
+                    <span>LOG OUT</span>
+                  </span>
                 </button>
               </SignOutButton>
             ) : (
