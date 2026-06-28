@@ -538,21 +538,24 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     const args = parts.slice(1);
 
     switch (cmd) {
-      case "help":
-        setCliHistory(prev => [
-          ...prev,
+      case "help": {
+        const helpLines = [
           "AVAILABLE OPERATIONS:",
           "  help                - Display this instructions sheet",
           "  clear               - Clear terminal screen log",
           "  fleet / assets      - List all tracked hosts and health status",
           "  isolate <AssetId>   - Trigger network isolation on host node",
           "  restore <AssetId>   - Restore host network connection",
-          "  simulate <1-5>      - Trigger threat simulation scenario (1-5)",
-          "  audit               - Print host compliance isolation metrics",
-          "  mute / unmute       - Toggle tactile sound console",
-          ""
-        ]);
+        ];
+        if (isForcedDemo) {
+          helpLines.push("  simulate <1-5>      - Trigger threat simulation scenario (1-5)");
+        }
+        helpLines.push("  audit               - Print host compliance isolation metrics");
+        helpLines.push("  mute / unmute       - Toggle tactile sound console");
+        helpLines.push("");
+        setCliHistory(prev => [...prev, ...helpLines]);
         break;
+      }
       case "clear":
         setCliHistory([]);
         break;
@@ -626,6 +629,10 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         break;
       }
       case "simulate": {
+        if (!isForcedDemo) {
+          setCliHistory(prev => [...prev, "  ERROR: 'simulate' is a restricted command and only available in the Sandbox Demo.", ""]);
+          break;
+        }
         const indexStr = args[0];
         if (!indexStr || !["1", "2", "3", "4", "5"].includes(indexStr)) {
           setCliHistory(prev => [...prev, "  ERROR: Specify simulation scenario index (1-5).", ""]);
