@@ -453,14 +453,14 @@ export async function getTenantOllamaConfig(tenantId: string): Promise<TenantOll
     return {
       evaluationMode: tenant?.EvaluationMode || 'HYBRID_HEURISTIC',
       ollamaEndpoint: tenant?.OllamaEndpoint || env("OLLAMA_HOST", "http://localhost:11434"),
-      ollamaModel: tenant?.OllamaModel || env("OLLAMA_MODEL", "llama3")
+      ollamaModel: tenant?.OllamaModel || env("OLLAMA_MODEL", "auto")
     };
   } catch (err) {
     console.error("Failed to get tenant Ollama config:", err);
     return {
       evaluationMode: 'HYBRID_HEURISTIC',
       ollamaEndpoint: env("OLLAMA_HOST", "http://localhost:11434"),
-      ollamaModel: env("OLLAMA_MODEL", "llama3")
+      ollamaModel: env("OLLAMA_MODEL", "auto")
     };
   }
 }

@@ -151,7 +151,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
       ollamaConfig: {
         evaluationMode: 'HYBRID_HEURISTIC',
         ollamaEndpoint: 'http://localhost:11434',
-        ollamaModel: 'llama3'
+        ollamaModel: 'auto'
       }
     }
   });
@@ -164,7 +164,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const ollamaConfig = data?.ollamaConfig || {
     evaluationMode: 'HYBRID_HEURISTIC',
     ollamaEndpoint: 'http://localhost:11434',
-    ollamaModel: 'llama3'
+    ollamaModel: 'auto'
   };
 
   const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);
@@ -1184,17 +1184,32 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                     <div className="border border-zinc-800/80 bg-zinc-900/20 p-2 flex flex-col gap-2">
                       <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
                         <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Ollama Configuration</span>
-                        <button
-                          onClick={() => handleSaveOllamaConfig(ollamaConfig.evaluationMode === 'HYBRID_HEURISTIC' ? 'PURE_OLLAMA' : 'HYBRID_HEURISTIC')}
-                          disabled={savingConfig}
-                          className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors ${
-                            ollamaConfig.evaluationMode === 'PURE_OLLAMA'
-                              ? 'bg-amber-950/40 border-amber-900 text-amber-400 hover:bg-amber-900 hover:text-white cursor-pointer'
-                              : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700 cursor-pointer'
-                          }`}
-                        >
-                          {savingConfig ? 'SAVING...' : ollamaConfig.evaluationMode === 'PURE_OLLAMA' ? 'PURE OLLAMA' : 'HYBRID SIGNATURE'}
-                        </button>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveOllamaConfig('HYBRID_HEURISTIC')}
+                            disabled={savingConfig}
+                            className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
+                              ollamaConfig.evaluationMode === 'HYBRID_HEURISTIC'
+                                ? 'bg-indigo-950/40 border-indigo-700 text-indigo-400 hover:bg-indigo-900 hover:text-white'
+                                : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
+                            }`}
+                          >
+                            HYBRID
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveOllamaConfig('PURE_OLLAMA')}
+                            disabled={savingConfig}
+                            className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors cursor-pointer ${
+                              ollamaConfig.evaluationMode === 'PURE_OLLAMA'
+                                ? 'bg-amber-950/40 border-amber-700 text-amber-400 hover:bg-amber-900 hover:text-white'
+                                : 'bg-zinc-950 border-zinc-850 text-zinc-650 hover:border-zinc-700'
+                            }`}
+                          >
+                            PURE OLLAMA
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-2">
