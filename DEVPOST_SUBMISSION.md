@@ -15,35 +15,66 @@ We built **LifecycleZero** to solve this. It acts as a lightweight telemetry sys
 
 ---
 
-## 🛠️ 2. How We Built It
+## 🛠️ 2. Why DynamoDB is the Core Database Choice
 
-We built the backend to scale easily on AWS and run with a zero-idle database cost:
+If we had used a traditional relational database (like PostgreSQL or MySQL), this project would suffer from high idle costs, connection pooling issues under serverless loads, and scaling bottlenecks. We chose **Amazon DynamoDB** as our primary database for the following reasons:
 
-### The Database: DynamoDB Single-Table Design
-We put all our B2B data (tenant settings, employee directories, hardware specs, logs, and audit trails) into a single DynamoDB table called `LifecycleZero_Assets`.
-*   **B2B Tenant Isolation**: We separate each company's data by prefixing the partition keys:
-    $$\text{Partition Key (PK)} = \text{"TENANT\#"} + \text{TenantId}$$
-    The server reads the tenant ID directly from secure Clerk authentication tokens, so data can never leak between customers.
-*   **Cost-Efficient Sparse Index**: 99% of logs are normal. If we indexed every single ping, our database costs would skyrocket. Instead, we created a Sparse Index ($GSI2$) that only indexes events marked as warnings or critical alerts. This makes loading the alerts page on the dashboard cheap and fast:
-    $$\text{Index Scan Cost} = \mathcal{O}(1)$$
-*   **Write Sharding**: We split telemetry logs across 10 shards using a hash of the device ID:
-    $$S(a) = \left( \sum_{i=1}^{n} \text{char}(a_i) \cdot 31^{n-i} \right) \pmod{10}$$
-    where $a$ is the $\text{AssetId}$. This prevents database write bottlenecks when many devices report status at the same time.
-*   **Atomic Isolation Transactions**: When an administrator isolates a device, the system runs an atomic transaction ($TransactWriteItems$) that checks if the device is active, marks it as $\text{"ISOLATED"}$, and writes an unchangeable audit log detailing who isolated it and why.
+### A. The Cost Problem: Scaling to Zero
+For a B2B SaaS startup, keeping infrastructure costs low is critical. Relational databases like Amazon Aurora Serverless v2 have a minimum capacity of $0.5\text{ ACUs}$ (Aurora Capacity Units), which translates to a fixed idle cost of roughly $\$35.00\text{ to }\$43.00\text{ / month}$ even if no devices are reporting.
+DynamoDB is completely serverless. It charges purely based on usage (Read/Write Capacity Units) and storage size. If your clients go offline or you have zero traffic:
+$$\text{Idle Database Cost} = \$0.00$$
+This matches our B2B unit economics, allowing us to maintain a high gross margin.
 
-### Ingestion & SQS Queue
-*   **Amazon SQS Buffer**: Instead of writing telemetry directly to the database (which could crash under heavy load), the API writes logs straight to an SQS queue and returns a fast $202\text{ Accepted}$ response in under $50\text{ms}$.
-*   **Queue Worker & Quarantine**: A TypeScript worker processes logs from the queue. If a corrupt message fails to process 5 times (based on the SQS $ApproximateReceiveCount$), it gets quarantined and deleted automatically.
+### B. Eliminating Connection Pooling in Serverless Environments
+Our frontend is deployed on **Vercel Serverless Functions**. In a relational database model, every serverless function execution opens a new TCP connection to the database. Under high telemetry load, this quickly leads to connection exhaustion, requiring expensive middle layers like RDS Proxy.
+DynamoDB uses a stateless HTTP API client. Next.js serverless functions query DynamoDB using standard HTTP requests:
+*   No connection pools to manage or exhaust.
+*   No RDS Proxy configuration needed.
+*   Instant scaling from 1 request per day to 10,000 requests per second.
 
-### Edge Proxy & Security Checks
-*   **Edge Rate Limiting**: Our Vercel Edge Middleware checks request rates using an API call to Upstash Redis, preventing API spam before it hits our serverless routes.
-*   **Cryptographic Key Rotation**: The first time an agent runs, it registers using a global enrollment key. The server registers the device, generates a unique, device-specific key, and returns it. The agent saves this key locally and signs all future pings using HMAC-SHA256:
-    $$\text{HMAC}(k, m) = \text{SHA256}\Big((k \oplus \text{opad}) \mathbin{\Vert} \text{SHA256}\big((k \oplus \text{ipad}) \mathbin{\Vert} m\big)\Big)$$
-*   **Hardware UUID Lock**: The agent checks the motherboard BIOS UUID on startup. If a spoofed device tries to copy the agent's key, the signature check fails because the hardware UUID does not match.
+### C. Multi-Tenant Partition Isolation ($PK$)
+We consolidate all distinct B2B data entities (Tenant Metadata, Employees, Assets, Telemetry Streams, Procurement Requests, and Audit Logs) into a single physical table (`LifecycleZero_Assets`) to optimize query costs and enforce logical boundaries. We enforce tenant data isolation by partitioning records using the tenant prefix:
+$$\text{Partition Key (PK)} = \text{"TENANT\#"} + \text{TenantId}$$
+Tenant contexts are verified server-side using claims inside Clerk authentication tokens, preventing cross-tenant access.
+
+### D. Single-Table Design Access Patterns
+Instead of using SQL joins, which slow down as tables grow, we resolve all five critical access patterns in single round-trips:
+*   **Access Pattern 1 (Assets by Tenant/Employee)**: `PK = TENANT#<TenantId>`, `SK = ASSET#<AssetId>` / `EMPLOYEE#<Email>` (Fetches asset records and employee metadata).
+*   **Access Pattern 2 (Procurement Requests)**: `PK = TENANT#<TenantId>`, `SK = REQ#<RequestId>` (Loads pending hardware approval requests).
+*   **Access Pattern 3 (Chronological Audit Trail)**: `PK = TENANT#<TenantId>`, `SK = AUDIT#<AssetId>#<Timestamp>` (Fetches unchangeable logs).
+*   **Access Pattern 4 (Dashboard Statistics)**: Aggregates active, warning, and isolated counts across all assets matching the partition key.
+*   **Access Pattern 5 (Transactional Status Resolution)**: Performs dynamic asset resolution during telemetry ingestion.
+
+### E. Write Sharding to Prevent Hot Partitions
+To prevent partition write hotspots when thousands of devices report telemetry simultaneously, we shard telemetry partitions across 10 shards. We calculate the shard ID deterministically using a polynomial hash of the device's unique ID modulo 10:
+$$S(a) = \left( \sum_{i=1}^{n} \text{char}(a_i) \cdot 31^{n-i} \right) \pmod{10}$$
+where $a$ is the $\text{AssetId}$ and $S(a)$ determines the target partition shard.
+
+### F. Cost-Saving Sparse Indexing ($GSI2$)
+99% of logs are normal. If we indexed every single ping, our database costs would skyrocket. Instead, we created a Sparse Index ($GSI2$) that only indexes events marked as warnings or critical alerts. This makes loading the alerts page on the dashboard cheap and fast:
+$$\text{Index Scan Cost} = \mathcal{O}(1)$$
+avoiding expensive full-table scans.
+
+### G. ACID Transactions for Critical Security Events
+When an administrator quarantines a machine, we must prevent double-isolation anomalies and log a tamper-proof audit trail for SOC 2 compliance. DynamoDB’s `TransactWriteItems` executes this atomically:
+*   **ConditionCheck**: Verifies the asset is active and not already isolated.
+*   **Update**: Marks status as $\text{"ISOLATED"}$.
+*   **Put**: Appends an unchangeable custody audit log.
+
+### H. Native TTL Auto-Pruning
+High-frequency telemetry eats up disk storage quickly. We tag each telemetry heartbeat with a Unix timestamp attribute (`ExpireAt` set to 90 days in the future). DynamoDB’s internal engine automatically deletes expired records in the background at **zero cost**, keeping our table slim and cost-efficient.
 
 ---
 
-## 🎨 3. Design and User Experience
+## ⚡ 3. High-Throughput Telemetry Ingestion & Queue Decoupling
+
+To handle high-frequency pings from endpoints, we decoupled the ingestion API. Telemetry requests write directly to an **Amazon SQS Queue**, returning a $202\text{ Accepted}$ response in under $50\text{ms}$. 
+
+A background worker daemon long-polls the queue to process the logs. If a bad message fails to process more than 5 times (determined by checking the SQS message attribute $ApproximateReceiveCount$), it is quarantined and deleted.
+
+---
+
+## 🎨 4. Design and User Experience
 
 We wanted the UI to look and feel like a modern security dashboard:
 
@@ -54,7 +85,7 @@ We wanted the UI to look and feel like a modern security dashboard:
 
 ---
 
-## 💼 4. Business Value & B2B Fit
+## 💼 5. Business Value & B2B Fit
 
 *   **Compliance Ready**: Regulations like the EU AI Act require companies to audit how AI is used and penalize companies heavily for compliance failures. LifecycleZero provides downloadable CSV and JSON audit logs to satisfy compliance requirements.
 *   **Easy Onboarding**: Built with Clerk B2B organization portals. Admins sign in, invite their team, and get their enrollment key instantly.
@@ -68,7 +99,7 @@ We wanted the UI to look and feel like a modern security dashboard:
 
 ---
 
-## 🧪 5. Testing & Verification
+## 🧪 6. Testing & Verification
 
 We wrote integration tests to verify every database access pattern, transaction, and isolation state:
 
@@ -116,7 +147,7 @@ Tenant under test: org_test_999
 
 ---
 
-## 🎥 Links & References
+## 🎥 7. Links & References
 *   **Primary Database Used**: Amazon DynamoDB
 *   **Published Dashboard URL**: `https://YOUR_VERCEL_DEPLOYMENT_URL.vercel.app`
 *   **Ingestion Endpoint**: `https://YOUR_VERCEL_DEPLOYMENT_URL.vercel.app/api/ingest`
