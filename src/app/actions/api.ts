@@ -683,6 +683,7 @@ export async function updateTenantOllamaConfigAction(config: {
   evaluationMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA';
   ollamaEndpoint?: string;
   ollamaModel?: string;
+  sensitiveFilePatterns?: string[];
 }) {
   try {
     const { tenantId } = await getTenantContext();

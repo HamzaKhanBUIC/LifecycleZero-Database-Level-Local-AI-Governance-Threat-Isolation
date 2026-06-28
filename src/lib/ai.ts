@@ -244,10 +244,12 @@ export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<
   // =========================================================================
   // COMMON HEURISTIC VARIABLES
   // =========================================================================
-  const sensitivePatterns = [
-    "auth_tokens", "payroll", "credential", "secret", "password", 
-    "key", ".env", "id_rsa", "database", "backup", "ledger", "financial"
-  ];
+  const sensitivePatterns = config.sensitiveFilePatterns && config.sensitiveFilePatterns.length > 0
+    ? config.sensitiveFilePatterns
+    : [
+        "auth_tokens", "payroll", "credential", "secret", "password", 
+        "key", ".env", "id_rsa", "database", "backup", "ledger", "financial"
+      ];
   
   const knownAiProcesses = [
     "llama.cpp", "ollama", "lmstudio", "ollama-runner"

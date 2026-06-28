@@ -158,6 +158,11 @@ const SCENARIOS = {
   }
 };
 
+const DEFAULT_SENSITIVE_PATTERNS = [
+  "auth_tokens", "payroll", "credential", "secret", "password", 
+  "key", ".env", "id_rsa", "database", "backup", "ledger", "financial"
+];
+
 export default function Dashboard({ initialAssets, initialAlerts, tenantId, isForcedDemo = false }: DashboardProps) {
   const [activeTenantId, setActiveTenantId] = useState(tenantId || DEFAULT_TENANT_ID);
   const sortedInitialAlerts = (initialAlerts || []).sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
@@ -184,13 +189,17 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const ollamaConfig = data?.ollamaConfig || {
     evaluationMode: 'HYBRID_HEURISTIC',
     ollamaEndpoint: 'http://localhost:11434',
-    ollamaModel: 'llama3'
+    ollamaModel: 'llama3',
+    sensitiveFilePatterns: DEFAULT_SENSITIVE_PATTERNS
   };
 
   const lastTenantRef = useRef<string | null>(null);
 
   const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);
   const [customModel, setCustomModel] = useState(ollamaConfig.ollamaModel);
+  const [customPatterns, setCustomPatterns] = useState(
+    (ollamaConfig.sensitiveFilePatterns || DEFAULT_SENSITIVE_PATTERNS).join(", ")
+  );
   const [savingConfig, setSavingConfig] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{
     status: 'idle' | 'success' | 'error';
@@ -201,6 +210,8 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     if (data?.ollamaConfig && lastTenantRef.current !== activeTenantId) {
       setCustomEndpoint(data.ollamaConfig.ollamaEndpoint);
       setCustomModel(data.ollamaConfig.ollamaModel);
+      const patterns = data.ollamaConfig.sensitiveFilePatterns || DEFAULT_SENSITIVE_PATTERNS;
+      setCustomPatterns(patterns.join(", "));
       lastTenantRef.current = activeTenantId;
     }
   }, [data?.ollamaConfig, activeTenantId]);
@@ -253,10 +264,16 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     }
 
     try {
+      const parsedPatterns = customPatterns
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter((p) => p.length > 0);
+
       const res = await updateTenantOllamaConfigAction({
         evaluationMode: targetMode as 'HYBRID_HEURISTIC' | 'PURE_OLLAMA',
         ollamaEndpoint: customEndpoint,
-        ollamaModel: customModel
+        ollamaModel: customModel,
+        sensitiveFilePatterns: parsedPatterns
       });
       if (res.success) {
         lastTenantRef.current = null; // force one-time re-sync from newly saved database config
@@ -1338,6 +1355,17 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                             />
                           )}
                         </div>
+                      </div>
+
+                      <div className="flex flex-col gap-0.5 mb-1">
+                        <label className="text-[8px] font-mono text-zinc-500 uppercase">Sensitive File Patterns (comma-separated)</label>
+                        <input 
+                          type="text"
+                          value={customPatterns}
+                          onChange={(e) => setCustomPatterns(e.target.value)}
+                          placeholder="e.g. payroll, credential, secret, .env"
+                          className="bg-zinc-950 border border-zinc-800 px-1.5 py-1 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
+                        />
                       </div>
 
                       {connectionStatus.status !== 'idle' && (
