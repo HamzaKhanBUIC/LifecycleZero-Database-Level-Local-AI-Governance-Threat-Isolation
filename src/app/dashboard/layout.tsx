@@ -47,7 +47,7 @@ export default async function DashboardLayout({
         <div className="mb-6 pb-6 border-b border-zinc-900">
           <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
           {hasClerk ? (
-            <div className="w-full bg-[#0a0a0a] border border-zinc-900 rounded p-1">
+            <div className="w-full bg-[#0a0a0a] border border-zinc-900 rounded p-1 flex flex-col gap-1.5">
               <OrganizationSwitcher 
                 hidePersonal
                 appearance={{
@@ -64,6 +64,10 @@ export default async function DashboardLayout({
                   }
                 }}
               />
+              <div className="px-2 py-1 bg-[#050505] border border-zinc-900 rounded text-[9px] text-zinc-500 font-mono flex items-center justify-between">
+                <span className="truncate select-all">ID: {tenantId}</span>
+                <span className="text-[8px] text-green-500 font-semibold">[LIVE]</span>
+              </div>
             </div>
           ) : (
             <div className="w-full bg-[#0a0a0a] border border-zinc-900 text-zinc-400 px-3 py-2 rounded font-mono text-xs flex justify-between items-center">
