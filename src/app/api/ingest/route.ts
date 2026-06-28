@@ -5,6 +5,7 @@ import { env } from '@/lib/env';
 import { evaluateTelemetryRisk } from '@/lib/ai';
 import { docClient } from '@/lib/dynamodb';
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import crypto from 'crypto';
 
 const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
@@ -78,7 +79,11 @@ async function processTelemetryInline(payload: any) {
 export async function POST(request: Request) {
   try {
     const agentKey = request.headers.get("x-agent-key");
-    const body = await request.json();
+    const signature = request.headers.get("x-agent-signature");
+    
+    // Read raw body text first to guarantee layout matches signature computation (AWS/cryptographic standard)
+    const rawBody = await request.text();
+    const body = JSON.parse(rawBody);
     const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, hardwareUuid } = body;
 
     // Validation
@@ -118,13 +123,50 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Asset ${assetId} not found and auto-enrollment failed.` }, { status: 404 });
       }
     } else {
-      // Validate device-specific key (fall back to global key if not set on legacy asset)
       const expectedAgentKey = asset.AgentKey || globalEnrollmentKey;
-      if (agentKey !== expectedAgentKey) {
-        return NextResponse.json({
-          error: "UNAUTHORIZED_AGENT",
-          message: "Invalid X-Agent-Key credentials for this device."
-        }, { status: 401 });
+      const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+      const isSandbox = allowedSandboxTenants.includes(tenantId);
+
+      // Perform HMAC-SHA256 signature verification
+      if (!isSandbox || signature) {
+        if (!signature) {
+          return NextResponse.json({
+            error: "UNAUTHORIZED_SIGNATURE",
+            message: "Missing required x-agent-signature header for production tenant."
+          }, { status: 401 });
+        }
+
+        const computedSignature = crypto
+          .createHmac("sha256", expectedAgentKey)
+          .update(rawBody)
+          .digest("hex");
+
+        const signatureBuffer = Buffer.from(signature, "hex");
+        const computedBuffer = Buffer.from(computedSignature, "hex");
+
+        // Validate exact buffer length to prevent timingSafeEqual crash
+        if (signatureBuffer.length !== computedBuffer.length) {
+          return NextResponse.json({
+            error: "UNAUTHORIZED_SIGNATURE",
+            message: "Invalid cryptographic signature length."
+          }, { status: 401 });
+        }
+
+        const isSignatureValid = crypto.timingSafeEqual(signatureBuffer, computedBuffer);
+        if (!isSignatureValid) {
+          return NextResponse.json({
+            error: "UNAUTHORIZED_SIGNATURE",
+            message: "Cryptographic verification failed. Spoofing attempt blocked."
+          }, { status: 401 });
+        }
+      } else {
+        // Fallback for legacy sandbox telemetry that does not support cryptographic signing
+        if (agentKey !== expectedAgentKey) {
+          return NextResponse.json({
+            error: "UNAUTHORIZED_AGENT",
+            message: "Invalid X-Agent-Key credentials for this device."
+          }, { status: 401 });
+        }
       }
 
       // Mitigate device spoofing by checking hardware signature matches enrolled signature

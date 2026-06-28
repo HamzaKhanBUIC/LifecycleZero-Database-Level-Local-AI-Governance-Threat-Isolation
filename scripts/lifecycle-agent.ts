@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import os from "os";
 import dotenv from "dotenv";
+import crypto from "crypto";
 
 dotenv.config({ path: ".env.local" });
 
@@ -142,13 +143,20 @@ async function runAgent() {
       };
 
       // 4. Send telemetry POST to Next.js server
+      const bodyStr = JSON.stringify(payload);
+      const signature = crypto
+        .createHmac("sha256", activeAgentKey)
+        .update(bodyStr)
+        .digest("hex");
+
       const response = await fetch(INGEST_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Agent-Key": activeAgentKey,
+          "X-Agent-Signature": signature,
         },
-        body: JSON.stringify(payload),
+        body: bodyStr,
       });
 
       const data: any = await response.json();
