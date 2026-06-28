@@ -106,7 +106,7 @@ export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
 export async function isolateAsset(tenantId: string, assetId: string, reason?: string) {
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  let actorName = await getActorName();
+  const actorName = await getActorName();
   if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
     try {
       const context = await getTenantContext();
@@ -160,7 +160,7 @@ export async function isolateAsset(tenantId: string, assetId: string, reason?: s
 export async function restoreAsset(tenantId: string, assetId: string) {
   let activeTenantId = tenantId;
   let actorId = "ADMIN_123";
-  let actorName = await getActorName();
+  const actorName = await getActorName();
   if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
     try {
       const context = await getTenantContext();

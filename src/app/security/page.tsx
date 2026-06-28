@@ -1,5 +1,5 @@
 import Dashboard from "../../components/Dashboard";
-import { getAssets, getCrossAssetAlerts } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, seedActiveTenantAction } from "@/lib/api";
 import { getTenantContext } from "@/lib/auth";
 
 export default async function SecurityPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
@@ -22,10 +22,22 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
   let initialAssets: any[] = [];
   let initialAlerts: any[] = [];
   try {
-    const [assets, alerts] = await Promise.all([
+    let [assets, alerts] = await Promise.all([
       getAssets(tenantId),
       getCrossAssetAlerts(tenantId)
     ]);
+
+    // Automatically pre-populate sandbox demo nodes if empty
+    if (isDemoMode && assets.length === 0) {
+      console.log("Empty sandbox detected. Automatically pre-populating database for the judges...");
+      await seedActiveTenantAction(tenantId);
+      // Re-fetch after seeding
+      [assets, alerts] = await Promise.all([
+        getAssets(tenantId),
+        getCrossAssetAlerts(tenantId)
+      ]);
+    }
+
     initialAssets = assets;
     initialAlerts = alerts;
   } catch (e) {

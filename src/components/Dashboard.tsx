@@ -1091,7 +1091,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   <div className="flex-1 bg-[#050505] border border-green-900/30 p-3 font-mono text-[10px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 max-h-[140px] select-text relative shadow-[inset_0_0_20px_rgba(0,255,0,0.02)]">
                     {simulationLog.map((logLine, idx) => (
                       <div key={idx} className="text-green-500/90 leading-tight">
-                        <span className="text-green-800/70 mr-2">[{new Date(Date.now() - (simulationLog.length - 1 - idx) * 600).toISOString().split('T')[1].slice(0,12)}]</span>
+                        <span className="text-green-800/70 mr-2" suppressHydrationWarning>[{new Date(Date.now() - (simulationLog.length - 1 - idx) * 600).toISOString().split('T')[1].slice(0,12)}]</span>
                         <span className={logLine.includes("FAILED") || logLine.includes("ERROR") ? "text-red-400" : ""}>{logLine}</span>
                       </div>
                     ))}

@@ -50,7 +50,7 @@ function getHardwareUuid(): string {
       const output = execSync("cat /sys/class/dmi/id/product_uuid", { stdio: ["ignore", "pipe", "ignore"] }).toString();
       return output.trim() || "LINUX-HW-MOCK-UUID";
     }
-  } catch (err) {
+  } catch {
     return `FALLBACK-HW-UUID-${os.hostname()}`;
   }
 }

@@ -33,6 +33,7 @@ export default function WelcomePage() {
   const [isMuted, setIsMuted] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMuted(audio.isMuted());
   }, []);
 

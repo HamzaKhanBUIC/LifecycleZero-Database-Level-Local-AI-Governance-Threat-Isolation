@@ -34,7 +34,8 @@ function safeParseJSON(text: string): any {
 /**
  * Sends the telemetry to AWS Bedrock (Claude 3 Haiku) for enterprise security evaluation.
  */
-async function evaluateWithBedrock(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _evaluateWithBedrock(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
   const bedrockClient = new BedrockRuntimeClient({
     region: env("AWS_REGION", "us-east-1"),
     ...(env("AWS_ACCESS_KEY_ID") && env("AWS_SECRET_ACCESS_KEY") && {
@@ -104,7 +105,8 @@ export interface RiskEvaluation {
 /**
  * Sends the telemetry to Groq for extremely fast evaluation.
  */
-async function evaluateWithGroq(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _evaluateWithGroq(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
   if (!env("GROQ_API_KEY")) throw new Error("GROQ_API_KEY missing");
 
   const prompt = `You are a Zero-Trust Agentic Security AI.
@@ -149,7 +151,8 @@ Respond ONLY in JSON format:
 /**
  * Fallback to Google Gemini if Groq fails.
  */
-async function evaluateWithGemini(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _evaluateWithGemini(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
   if (!env("GEMINI_API_KEY")) throw new Error("GEMINI_API_KEY missing");
 
   const ai = new GoogleGenAI({ apiKey: env("GEMINI_API_KEY") });
@@ -223,7 +226,7 @@ Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITI
 }
 
 /**
- * Main evaluation router. Tries primary provider, falls back if needed.
+ * Main evaluation router. Tries local signature matching first, then falls back to local Ollama.
  */
 export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<RiskEvaluation> {
   const processLower = telemetry.ProcessName.toLowerCase();
@@ -252,7 +255,11 @@ export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<
   ];
   
   const knownAiProcesses = [
-    "llama.cpp", "ollama", "lmstudio", "python", "node", "ollama-runner"
+    "llama.cpp", "ollama", "lmstudio", "ollama-runner"
+  ];
+
+  const developerTools = [
+    "cursor.exe", "code.exe", "vscode", "antigravity.exe", "python", "node"
   ];
 
   const hasSensitiveFile = files.some(file => {
@@ -261,65 +268,72 @@ export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<
   });
 
   const isAiProcess = knownAiProcesses.some(proc => processLower.includes(proc));
+  const isDevTool = developerTools.some(proc => processLower.includes(proc));
 
-  // If no sensitive files are touched and it's not a known model runner, bypass AI
-  if (!isAiProcess && !hasSensitiveFile) {
+  // Case A: Known local LLM runner reading a sensitive file -> CRITICAL threat
+  if (isAiProcess && hasSensitiveFile) {
+    const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
+    return {
+      riskLevel: "CRITICAL",
+      reasoning: `Tier 2 Signature Match: Unauthorized local AI model '${telemetry.ProcessName}' accessed restricted data file '${matchedFile}'. Immediate containment required.`
+    };
+  }
+
+  // Case B: Approved developer tool / agent reading a sensitive configuration/secret -> WARNING threat
+  if (isDevTool && hasSensitiveFile) {
+    const matchedFile = files.find(f => sensitivePatterns.some(p => f.toLowerCase().includes(p)));
+    return {
+      riskLevel: "WARNING",
+      reasoning: `Tier 2 Signature Match: Developer tool / coding agent '${telemetry.ProcessName}' accessed sensitive config file '${matchedFile}'. Flagged for compliance review.`
+    };
+  }
+
+  // Case C: Developer tool accessing benign project/source files -> SAFE
+  if (isDevTool && !hasSensitiveFile) {
+    return {
+      riskLevel: "SAFE",
+      reasoning: `Tier 2 Signature Match: Sanctioned developer operation verified for '${telemetry.ProcessName}'.`
+    };
+  }
+
+  // Case D: Completely benign process accessing standard files
+  if (!isAiProcess && !isDevTool && !hasSensitiveFile) {
     return {
       riskLevel: "SAFE",
       reasoning: `Tier 2: Benign process '${telemetry.ProcessName}' accessing standard files.`
     };
   }
 
-  // If it's a known developer tool (e.g. Cursor, VSCode) and no sensitive files are accessed
-  if (processLower === "cursor.exe" || processLower === "code.exe" || processLower === "vscode") {
-    if (!hasSensitiveFile) {
-      return {
-        riskLevel: "SAFE",
-        reasoning: "Tier 2: Sanctioned developer IDE activity verified."
-      };
-    }
-  }
-
   // =========================================================================
-  // TIER 3: LLM EVALUATION (Escalation to Claude 3 Haiku / Failovers)
+  // TIER 3: LOCAL AI EVALUATION (Offline Ollama or safe local heuristic fallback)
   // =========================================================================
-  console.log(`[TIER 3] Escalating telemetry for asset ${telemetry.AssetId} to AI Evaluation...`);
-
-  const primaryProvider = env("AI_PROVIDER_PRIMARY", "bedrock");
+  console.log(`[TIER 3] Escalating telemetry for asset ${telemetry.AssetId} to Local Ollama AI...`);
 
   try {
-    if (primaryProvider === 'bedrock') {
-      return await evaluateWithBedrock(telemetry);
-    } else if (primaryProvider === 'ollama') {
-      return await evaluateWithOllama(telemetry);
-    } else if (primaryProvider === 'groq') {
-      return await evaluateWithGroq(telemetry);
-    } else {
-      return await evaluateWithGemini(telemetry);
-    }
+    // Only attempt local Ollama evaluation to preserve data privacy (no cloud sharing)
+    return await evaluateWithOllama(telemetry);
   } catch (error) {
-    console.warn(`⚠️ Primary AI Provider (${primaryProvider}) failed. Falling back... Error:`, error);
+    console.warn("⚠️ Local Ollama evaluation failed. Falling back to local offline heuristic...", error);
     
-    // Fallback logic
-    try {
-      if (primaryProvider === 'bedrock') {
-        if (env("GEMINI_API_KEY")) {
-          return await evaluateWithGemini(telemetry);
-        } else {
-          return await evaluateWithGroq(telemetry);
-        }
-      } else if (primaryProvider === 'ollama' || primaryProvider === 'groq') {
-        return await evaluateWithGemini(telemetry);
-      } else {
-        return await evaluateWithGroq(telemetry);
-      }
-    } catch (fallbackError) {
-      console.error("❌ Both Primary and Fallback AI Providers failed!", fallbackError);
+    // Heuristic safe fallback if Ollama is offline/unreachable
+    if (hasSensitiveFile) {
       return {
-        riskLevel: 'WARNING',
-        reasoning: 'System degraded: AI evaluation unavailable. Flagged for manual review.'
+        riskLevel: "CRITICAL",
+        reasoning: `Offline Heuristic: Anomalous process '${telemetry.ProcessName}' accessed restricted file. Flagged critical for data leak containment.`
       };
     }
+    
+    if (cpu > 80 || egress > 150) {
+      return {
+        riskLevel: "WARNING",
+        reasoning: `Offline Heuristic: Resource spike detected on host (CPU: ${cpu}%, Egress: ${egress}MB). Flagged for compliance review.`
+      };
+    }
+
+    return {
+      riskLevel: "SAFE",
+      reasoning: "Offline Heuristic: Process activity is within normal operational limits."
+    };
   }
 }
 

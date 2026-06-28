@@ -101,6 +101,13 @@ async function middleware(req: NextRequest) {
     }
   }
 
+  // Sniff demo query parameter and set cookie to org_demo_123 automatically so SSR has immediate context
+  if (isDemoQuery && tenantCookie !== "org_demo_123") {
+    const response = NextResponse.next();
+    response.cookies.set("lifecycle_tenant_id", "org_demo_123", { path: "/" });
+    return response;
+  }
+
   return NextResponse.next();
 }
 

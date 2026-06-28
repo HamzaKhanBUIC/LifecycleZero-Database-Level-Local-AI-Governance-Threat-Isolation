@@ -42,8 +42,9 @@ const sqsClient = new SQSClient({
 async function processTelemetryItem(payload: any) {
   const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, timestamp } = payload;
   
+  const shardId = Math.floor(Math.random() * 10);
   const baseTelemetry = {
-    PK: `TENANT#${tenantId}`,
+    PK: `TENANT#${tenantId}#TELEMETRY#SHARD#${shardId}`,
     SK: `TELEMETRY#${assetId}#${timestamp}`,
     AssetId: assetId,
     Timestamp: timestamp,

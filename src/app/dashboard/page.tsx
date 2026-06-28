@@ -7,9 +7,6 @@ import {
   Database, 
   ShoppingCart, 
   Laptop, 
-  Layers, 
-  CheckCircle, 
-  AlertCircle, 
   Play 
 } from "lucide-react";
 
