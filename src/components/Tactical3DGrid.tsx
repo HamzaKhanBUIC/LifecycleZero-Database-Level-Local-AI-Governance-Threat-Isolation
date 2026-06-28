@@ -245,8 +245,9 @@ export default function Tactical3DGrid({
                       width: `${cellSize}px`,
                       height: `${h}px`,
                       transformOrigin: "bottom",
-                      transform: `rotateX(-90deg) translateY(${h}px)`,
+                      transform: "rotateX(-90deg)",
                       bottom: 0,
+                      left: 0,
                       backgroundColor: colorFront,
                     }}
                   />
@@ -255,11 +256,12 @@ export default function Tactical3DGrid({
                   <div
                     className="absolute border border-zinc-950/20"
                     style={{
-                      width: `${cellSize}px`,
-                      height: `${h}px`,
+                      width: `${h}px`,
+                      height: `${cellSize}px`,
                       transformOrigin: "right",
-                      transform: `rotateY(90deg) rotateZ(-90deg) translateY(-${h}px)`,
+                      transform: "rotateY(90deg)",
                       right: 0,
+                      top: 0,
                       backgroundColor: colorSide,
                     }}
                   />
