@@ -20,14 +20,28 @@ import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@
  * Helper function to retrieve authenticated operator name from Clerk.
  */
 async function getActorName(): Promise<string> {
-  const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  if (
-    process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" &&
-    pubKey?.startsWith("pk_")
-  ) {
-    const { currentUser } = await import('@clerk/nextjs/server');
-    const user = await currentUser();
-    if (user) return `${user.firstName} ${user.lastName}`;
+  try {
+    const { cookies } = await import('next/headers');
+    const cookieStore = await cookies();
+    const tenantCookie = cookieStore.get("lifecycle_tenant_id")?.value;
+    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+    const isSandbox = allowedSandboxTenants.includes(tenantCookie || "");
+
+    if (isSandbox) {
+      return "Demo Administrator";
+    }
+
+    const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+    if (
+      process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" &&
+      pubKey?.startsWith("pk_")
+    ) {
+      const { currentUser } = await import('@clerk/nextjs/server');
+      const user = await currentUser();
+      if (user) return `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Authenticated Operator";
+    }
+  } catch (err) {
+    console.warn("Failed to retrieve actor name, defaulting to Demo Administrator:", err);
   }
   return "Demo Administrator";
 }
