@@ -116,28 +116,29 @@ LifecycleZero operates as a traditional high-margin B2B SaaS platform:
 
 ---
 
-## 🎥 Visual Proof & Dashboard Walkthrough
+## 🎥 Real Operational Workflows & Console Walkthrough
 
-### 1. Unified Fleet Overview & Device Heatmap
-Our high-contrast dashboard displaying 124 pre-rendered B2B assets:
-![Fleet Overview Dashboard](public/fleet_status_retrieved.png)
+### 1. Interactive Fleet Console
+The primary B2B cockpit renders a real-time, low-latency device status matrix. Assets are tracked, grouped, and displayed on a visual grid layout representing active, isolated, and warning states:
+* **Active Status**: Green nodes signifying active telemetry heartbeats, regular CPU/RAM metrics, and clean process activity.
+* **Warning Status**: Orange/Yellow nodes flagging low-severity anomalies, such as non-security developers executing local process diagnostics.
+* **Isolated Status**: Red nodes representing host endpoints locked out from the corporate network due to high-risk Shadow AI activities.
 
-### 2. Live Threat Simulation & AI Evaluation
-The Interactive Simulation Sandbox injecting an unauthorized local Ollama process:
-![Threat Simulation Sandbox](public/sandbox_simulated.png)
+### 2. Live Threat Mitigation & Heuristic AI Verification
+The interactive simulation suite demonstrates real-time protection flows:
+1. **Threat Injection**: An unauthorized local model accesses a protected directory (e.g. `ollama` reading `auth_tokens.json`).
+2. **Instant Correlation**: The background queue worker consumes the SQS event, triggers a local AI classification, flags a critical alert, and populates the sparse `GSI2` index.
+3. **Dashboard Sync**: The admin dashboard queries `GSI2` directly, instantly flashing the security alert onto the incident warnings log.
 
-### 3. Emergency Host Isolation & ACID State Transition
-Host server pillar transitioning to isolated red/grey state:
-![Quarantined Host Simulation](public/sandbox_isolated.png)
+### 3. Emergency Host Isolation & ACID State Transitions
+When an administrator quarantines a compromised machine:
+1. The admin triggers the isolation command via the UI or the operational CLI console.
+2. The server executes a DynamoDB `TransactWriteItems` transaction:
+   * **ConditionCheck**: Verifies the asset exists and is not already isolated, then flips the status to `ISOLATED`.
+   * **Immutable Audit Trail**: Appends a custody record containing operator credentials and timestamp.
+3. Once committed, the Next.js Edge proxy immediately intercepts all subsequent telemetry requests from that host's UUID and blocks them with `403 Forbidden`.
 
-### 4. Zero-Trust Silent Agent Offline Isolation
-A host automatically quarantined after its telemetry daemon is terminated:
-![Unreachable Agent Simulation](public/silent_agent_simulated.png)
-
-### 5. Multi-Tenant Serverless Database & Ingest Architecture
-Our serverless ingestion queue and AI feedback loop:
-![Database and Ingestion Architecture](public/system_architecture_diagram.png)
-
-### 6. Live Amazon DynamoDB Single-Table Database Console (Explore Items)
-The live DynamoDB single-table console verifying partition isolation:
-![Amazon DynamoDB Live Console](public/dynamodb_console.png)
+### 4. Zero-Trust Silent Agent Containment
+To mitigate situations where a threat actor terminates the local monitoring agent to evade detection, the platform enforces **Silent Agent Containment**:
+* If an active asset fails to send a telemetry heartbeat within a 60-second window, the background manager flags the device as `UNREACHABLE`.
+* The dashboard alerts operators of a potential security tamper, enabling immediate investigation.

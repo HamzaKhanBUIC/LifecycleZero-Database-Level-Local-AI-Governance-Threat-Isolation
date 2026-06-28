@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="public/logo.jpg" alt="LifecycleZero Logo" width="200" height="200" />
-</p>
-
 # LifecycleZero: Database-Level Local AI Governance & Threat Isolation
 
 [![CI/CD Pipeline](https://github.com/YOUR_GITHUB_USERNAME/hack-the-zero-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/hack-the-zero-stack/actions/workflows/ci.yml)
@@ -14,7 +10,7 @@ As local LLMs (like Ollama, Llama.cpp, and LM Studio) proliferate on corporate l
 
 LifecycleZero solves this by treating local AI safety as a high-throughput telemetry ingestion and database isolation problem:
 1. **Real-time Endpoint Telemetry Ingestion:** A lightweight endpoint daemon tracks local model activity (CPU, RAM, process names, files read, and network egress) and streams it to a secure gateway API.
-2. **Autonomous AI Threat Evaluation:** Telemetry is analyzed by a fast, secure, multi-tier AI evaluation pipeline (using AWS Bedrock, Google Gemini, and Groq) to determine if a local LLM is acting maliciously.
+2. **Autonomous AI Threat Evaluation:** Telemetry is analyzed by a fast, secure, multi-tier local evaluation pipeline (using offline heuristic signature rules and local Ollama containers) to determine if a local LLM is acting maliciously.
 3. **Database-Level Isolation Policy:** If a threat is detected, an administrator executes a single-click transaction that alters the asset's security state, writes an immutable audit log, and immediately blocks further telemetry ingestion at the API gateway level.
 
 ---
@@ -28,7 +24,7 @@ graph TD
     end
 
     subgraph AWS Serverless Infrastructure
-        API -- 1. Risk Evaluation Query --> LLM{Ollama / Bedrock / Gemini}
+        API -- 1. Risk Evaluation Query --> LLM{Ollama / Heuristics}
         API -- 2. TransactWriteCommand --> DynamoDB[(DynamoDB Single-Table)]
         
         subgraph DynamoDB Layout
@@ -47,11 +43,6 @@ graph TD
     classDef aws fill:#FF9900,stroke:#FFF,stroke-width:2px,color:#fff;
     class DynamoDB,GSI1,GSI2,TTL aws;
 ```
-
-![LifecycleZero System Architecture](public/system_architecture_diagram.png)
-
-### Live Amazon DynamoDB Single-Table Database Console
-![Amazon DynamoDB Live Console](public/dynamodb_console.png)
 
 ---
 

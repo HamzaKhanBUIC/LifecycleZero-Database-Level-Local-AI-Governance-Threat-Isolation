@@ -98,8 +98,6 @@ Because DynamoDB transactions are strictly ACID-compliant, if the host status ch
 
 Ingestion is decoupled to handle high-frequency telemetry logs across thousands of active endpoints:
 
-![LifecycleZero System Architecture](public/system_architecture_diagram.png)
-
 ```
 [Local Daemon] 
       │ (HTTPS POST)
@@ -228,5 +226,7 @@ Integrating an embedded, lightweight database like SQLite directly into the endp
 Every access pattern, database transaction, and security control in LifecycleZero is fully verified and functional:
 
 *   **Integration Verification (`npm run test:integration`):** Successfully verified single-table DynamoDB writes, sparse GSI2 index exclusions (confirming sparse index behavior), chronological audit logs generation, the atomic `ConditionCheck` transaction sequence preventing double-isolation race conditions, and edge API Gateway 403 blocks for isolated endpoint telemetry ingestion.
-*   **Automated Playwright UI & Sandbox Test (`test_sandbox.py`):** Verified root dashboard loading, simulation console rendering, scenario-based telemetry ingestion (`ollama` accessing `payroll_2026.xlsx` returning `202 QUEUED`), background worker alert processing, incident warning feed card loading, manual isolation click trigger, DynamoDB state transition, and subsequent API Gateway 403 quarantines.
+*   **Unique Agent Key Rotation Handshake:** Validated dynamic key rotation exchange between the ingestion gateway and the client daemon.
+*   **Hardware UUID Drift Validation:** Confirmed gateway blocks and flags spoofing attempts when mismatched hardware signatures are detected.
+*   **Database Write Sharding Distribution:** Verified telemetry logs are correctly sharded across physical partitions while remaining fully queryable via the GSI1 index.
 *   **Compilation & Zero-Shift Initial Paint:** Validated with `npx tsc --noEmit` yielding zero compilation errors. Server Component refactoring reduced initial UI render latency to sub-200ms with zero layout shifts.
