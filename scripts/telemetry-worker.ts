@@ -39,10 +39,19 @@ const sqsClient = new SQSClient({
   })
 });
 
+function getShardId(assetId: string): number {
+  let hash = 0;
+  for (let i = 0; i < assetId.length; i++) {
+    hash = (hash << 5) - hash + assetId.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 10;
+}
+
 async function processTelemetryItem(payload: any) {
   const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, timestamp } = payload;
   
-  const shardId = Math.floor(Math.random() * 10);
+  const shardId = getShardId(assetId);
   const baseTelemetry = {
     PK: `TENANT#${tenantId}#TELEMETRY#SHARD#${shardId}`,
     SK: `TELEMETRY#${assetId}#${timestamp}`,
