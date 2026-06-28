@@ -129,13 +129,10 @@ LifecycleZero offers two distinct entry points for testing and evaluation.
 6. A modal will pop up. Type `Suspicious LLM access` and click **Confirm Isolation**.
 7. Confirm that the node instantly turns grey (Isolated) and the alarm ceases.
 8. Click **RESET SANDBOX** in the top purple banner. Verify that the database is restored to a clean green state.
-
 ### Phase 4: Route B (Enterprise B2B Auth) Testing
 1. Navigate to `/security` (without the `?demo=true` query).
 2. Verify that the middleware redirects you to the `/sign-in` portal.
-3. Log in using the test credentials:
-   * **Email:** `judge_tester@lifecyclezero.com`
-   * **Password:** `H0Hackathon2026!`
+3. Sign up or log in using your own B2B organization account via the Clerk interface.
 4. Verify that you land in the authenticated B2B Threat Cockpit.
 5. **Verify Empty State Protection:** Since this is a fresh organization workspace, the cockpit grid should be empty, rendering the `[NO_ENDPOINTS_DETECTED_IN_GRID]` screen.
 6. **Register a Real Device:**
