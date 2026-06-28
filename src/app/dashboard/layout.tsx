@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { getTenantContext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -46,10 +46,31 @@ export default async function DashboardLayout({
         {/* Org Display */}
         <div className="mb-6 pb-6 border-b border-zinc-900">
           <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold mb-2">Organization</p>
-          <div className="w-full bg-[#0a0a0a] border border-zinc-900 text-zinc-400 px-3 py-2 rounded font-mono text-xs flex justify-between items-center">
-            <span>{tenantId}</span>
-            <span className="text-[10px] text-green-500 font-semibold">[LIVE]</span>
-          </div>
+          {hasClerk ? (
+            <div className="w-full bg-[#0a0a0a] border border-zinc-900 rounded p-1">
+              <OrganizationSwitcher 
+                hidePersonal
+                appearance={{
+                  elements: {
+                    rootBox: "w-full",
+                    organizationSwitcherTrigger: "w-full bg-[#0a0a0a] text-zinc-300 border-none font-mono text-xs hover:text-white px-2 py-1.5 justify-between flex items-center",
+                    organizationSwitcherTriggerIcon: "text-zinc-500",
+                    organizationPreview: "text-zinc-300 font-mono text-xs",
+                  },
+                  variables: {
+                    colorPrimary: '#ffffff',
+                    colorBackground: '#050505',
+                    colorText: '#ffffff'
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="w-full bg-[#0a0a0a] border border-zinc-900 text-zinc-400 px-3 py-2 rounded font-mono text-xs flex justify-between items-center">
+              <span>{tenantId}</span>
+              <span className="text-[10px] text-green-500 font-semibold">[DEMO]</span>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
