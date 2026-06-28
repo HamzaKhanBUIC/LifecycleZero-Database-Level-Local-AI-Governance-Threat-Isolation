@@ -167,16 +167,19 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     ollamaModel: 'llama3'
   };
 
+  const lastTenantRef = useRef<string | null>(null);
+
   const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);
   const [customModel, setCustomModel] = useState(ollamaConfig.ollamaModel);
   const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
-    if (data?.ollamaConfig) {
+    if (data?.ollamaConfig && lastTenantRef.current !== activeTenantId) {
       setCustomEndpoint(data.ollamaConfig.ollamaEndpoint);
       setCustomModel(data.ollamaConfig.ollamaModel);
+      lastTenantRef.current = activeTenantId;
     }
-  }, [data?.ollamaConfig]);
+  }, [data?.ollamaConfig, activeTenantId]);
 
   const handleSaveOllamaConfig = async (newMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA') => {
     setSavingConfig(true);
@@ -187,6 +190,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         ollamaModel: customModel
       });
       if (res.success) {
+        lastTenantRef.current = null; // force one-time re-sync from newly saved database config
         mutate(['dashboardData', activeTenantId]);
       }
     } catch (err) {
