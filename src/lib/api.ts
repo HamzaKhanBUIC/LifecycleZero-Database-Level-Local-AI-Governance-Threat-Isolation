@@ -9,7 +9,9 @@ import {
   createRequestAction, 
   resolveRequestAction, 
   seedActiveTenantAction,
-  registerAssetAction
+  registerAssetAction,
+  getTenantOllamaConfigAction,
+  updateTenantOllamaConfigAction
 } from "@/app/actions/api";
 
 export { 
@@ -23,7 +25,9 @@ export {
   createRequestAction, 
   resolveRequestAction, 
   seedActiveTenantAction,
-  registerAssetAction
+  registerAssetAction,
+  getTenantOllamaConfigAction,
+  updateTenantOllamaConfigAction
 };
 
 /**
@@ -41,4 +45,6 @@ export class LifecycleZeroAPI {
   static resolveRequestAction = resolveRequestAction;
   static seedActiveTenantAction = seedActiveTenantAction;
   static registerAssetAction = registerAssetAction;
+  static getTenantOllamaConfigAction = getTenantOllamaConfigAction;
+  static updateTenantOllamaConfigAction = updateTenantOllamaConfigAction;
 }

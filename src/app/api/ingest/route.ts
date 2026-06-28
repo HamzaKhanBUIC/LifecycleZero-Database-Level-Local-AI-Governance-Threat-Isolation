@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAssetById, createHardwareAsset } from '@/lib/dao';
+import { getAssetById, createHardwareAsset, getTenantOllamaConfig } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
 import { env } from '@/lib/env';
 import { evaluateTelemetryRisk } from '@/lib/ai';
@@ -8,10 +8,19 @@ import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 
 const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
+function getShardId(assetId: string): number {
+  let hash = 0;
+  for (let i = 0; i < assetId.length; i++) {
+    hash = (hash << 5) - hash + assetId.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash) % 10;
+}
+
 async function processTelemetryInline(payload: any) {
   const { tenantId, assetId, processName, filesAccessed, cpuUsage, ramUsage, networkEgress, timestamp } = payload;
   
-  const shardId = Math.floor(Math.random() * 10);
+  const shardId = getShardId(assetId);
   const baseTelemetry = {
     PK: `TENANT#${tenantId}#TELEMETRY#SHARD#${shardId}`,
     SK: `TELEMETRY#${assetId}#${timestamp}`,
@@ -26,46 +35,43 @@ async function processTelemetryInline(payload: any) {
     GSI1SK: `DATE#${timestamp}`,
   };
 
-  try {
-    // Evaluate risk level via Bedrock / Gemini fallback
-    const aiResult = await evaluateTelemetryRisk(baseTelemetry as any);
+  // Evaluate risk level via Bedrock / Gemini fallback
+  const aiResult = await evaluateTelemetryRisk(baseTelemetry as any);
 
-    // 90 days TTL
-    const ttlEpoch = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60);
+  // 90 days TTL
+  const ttlEpoch = Math.floor(Date.now() / 1000) + (90 * 24 * 60 * 60);
 
-    const telemetry: any = {
-      ...baseTelemetry,
-      RiskLevel: aiResult.riskLevel,
-      AiAnalysis: aiResult.reasoning,
-      TTL: ttlEpoch,
-    };
+  const telemetry: any = {
+    ...baseTelemetry,
+    RiskLevel: aiResult.riskLevel,
+    AiAnalysis: aiResult.reasoning,
+    TTL: ttlEpoch,
+  };
 
-    // Populate Sparse Index for Alerts
-    if (aiResult.riskLevel === "CRITICAL" || aiResult.riskLevel === "WARNING") {
-      telemetry.GSI2PK = `TENANT#${tenantId}#ALERT#${aiResult.riskLevel}`;
-      telemetry.GSI2SK = `DATE#${timestamp}`;
-    }
-
-    // Write directly to DynamoDB table
-    await docClient.send(new PutCommand({
-      TableName: TABLE_NAME,
-      Item: telemetry
-    }));
-
-    // Update Asset LastHeartbeat
-    await docClient.send(new UpdateCommand({
-      TableName: TABLE_NAME,
-      Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
-      UpdateExpression: "SET LastHeartbeat = :ts",
-      ExpressionAttributeValues: {
-        ":ts": new Date().toISOString()
-      }
-    }));
-    
-    console.log(`[INLINE PROCESSING] Successfully processed telemetry alert for ${assetId}. Risk: ${aiResult.riskLevel}`);
-  } catch (err) {
-    console.error(`[INLINE PROCESSING ERROR] Failed to process telemetry for ${assetId}:`, err);
+  // Populate Sparse Index for Alerts
+  if (aiResult.riskLevel === "CRITICAL" || aiResult.riskLevel === "WARNING") {
+    telemetry.GSI2PK = `TENANT#${tenantId}#ALERT#${aiResult.riskLevel}`;
+    telemetry.GSI2SK = `DATE#${timestamp}`;
   }
+
+  // Write directly to DynamoDB table
+  await docClient.send(new PutCommand({
+    TableName: TABLE_NAME,
+    Item: telemetry
+  }));
+
+  // Update Asset LastHeartbeat
+  await docClient.send(new UpdateCommand({
+    TableName: TABLE_NAME,
+    Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
+    UpdateExpression: "SET LastHeartbeat = :ts",
+    ExpressionAttributeValues: {
+      ":ts": new Date().toISOString()
+    }
+  }));
+  
+  console.log(`[INLINE PROCESSING] Successfully processed telemetry alert for ${assetId}. Risk: ${aiResult.riskLevel}`);
+  return aiResult;
 }
 
 
@@ -149,6 +155,27 @@ export async function POST(request: Request) {
       networkEgress: Number(networkEgress) || 0,
       timestamp: new Date().toISOString()
     };
+
+    const config = await getTenantOllamaConfig(tenantId);
+
+    // If PURE_OLLAMA mode is active, evaluate synchronously to bubble up connection errors to the judge
+    if (config.evaluationMode === "PURE_OLLAMA") {
+      try {
+        const aiResult = await processTelemetryInline(queuePayload);
+        return NextResponse.json({
+          success: true,
+          status: "EVALUATED",
+          agentKey: asset.AgentKey,
+          message: `Local Ollama evaluation completed successfully! Model '${config.ollamaModel}' analyzed the telemetry and concluded: "${aiResult.reasoning}"`
+        }, { status: 200 });
+      } catch (err: any) {
+        console.error("❌ PURE_OLLAMA Ingestion Evaluation Failed:", err);
+        return NextResponse.json({
+          error: "OLLAMA_OFFLINE",
+          message: err.message || `Local Ollama is offline or unreachable at '${config.ollamaEndpoint}'. Please start Ollama first.`
+        }, { status: 503 });
+      }
+    }
 
     // 4. Send to SQS (or local fallback file)
     const result = await sendToQueue(queuePayload);

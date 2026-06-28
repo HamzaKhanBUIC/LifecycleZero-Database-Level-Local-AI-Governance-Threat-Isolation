@@ -10,7 +10,9 @@ import {
   updateAssetStatusTransaction, 
   submitProcurementRequest, 
   resolveProcurementRequest,
-  createHardwareAsset
+  createHardwareAsset,
+  getTenantOllamaConfig,
+  updateTenantOllamaConfig
 } from "@/lib/dao";
 import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@/lib/types";
 
@@ -642,6 +644,40 @@ export async function registerAssetAction(data: {
     return { success: true };
   } catch (error: any) {
     console.error("❌ registerAssetAction Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Server action to get Ollama config for active tenant context
+ */
+export async function getTenantOllamaConfigAction() {
+  try {
+    const { tenantId } = await getTenantContext();
+    const config = await getTenantOllamaConfig(tenantId || "org_demo_123");
+    return { success: true, config };
+  } catch (error: any) {
+    console.error("❌ getTenantOllamaConfigAction Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Server action to update Ollama config for active tenant context
+ */
+export async function updateTenantOllamaConfigAction(config: {
+  evaluationMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA';
+  ollamaEndpoint?: string;
+  ollamaModel?: string;
+}) {
+  try {
+    const { tenantId } = await getTenantContext();
+    await updateTenantOllamaConfig(tenantId || "org_demo_123", config);
+    revalidatePath('/security');
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ updateTenantOllamaConfigAction Error:", error);
     return { success: false, error: error.message };
   }
 }
