@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -42,13 +42,23 @@ const generateChartData = (alerts: any[]) => {
 };
 
 const fetchDashboardData = async (tenantId: string) => {
-  const [fetchedAssets, fetchedAlerts] = await Promise.all([
+  const [fetchedAssets, fetchedAlerts, configRes] = await Promise.all([
     getAssets(tenantId),
-    getCrossAssetAlerts(tenantId)
+    getCrossAssetAlerts(tenantId),
+    getTenantOllamaConfigAction()
   ]);
   const sortedAlerts = fetchedAlerts.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
   const chartData = generateChartData(sortedAlerts);
-  return { assets: fetchedAssets, alerts: sortedAlerts, chartData };
+  return { 
+    assets: fetchedAssets, 
+    alerts: sortedAlerts, 
+    chartData,
+    ollamaConfig: configRes.success ? configRes.config : {
+      evaluationMode: 'HYBRID_HEURISTIC',
+      ollamaEndpoint: 'http://localhost:11434',
+      ollamaModel: 'llama3'
+    }
+  };
 };
 
 interface DashboardProps {
@@ -137,7 +147,12 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     fallbackData: {
       assets: initialAssets || [],
       alerts: sortedInitialAlerts,
-      chartData: generateChartData(sortedInitialAlerts)
+      chartData: generateChartData(sortedInitialAlerts),
+      ollamaConfig: {
+        evaluationMode: 'HYBRID_HEURISTIC',
+        ollamaEndpoint: 'http://localhost:11434',
+        ollamaModel: 'llama3'
+      }
     }
   });
   const [isolatingId, setIsolatingId] = useState<string | null>(null);
@@ -145,6 +160,41 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const [view3d, setView3d] = useState(true); // Default to true (3D) to wow the user on first load!
   const [selectionMode, setSelectionMode] = useState(false);
   const [bulkIsolating, setBulkIsolating] = useState(false);
+
+  const ollamaConfig = data?.ollamaConfig || {
+    evaluationMode: 'HYBRID_HEURISTIC',
+    ollamaEndpoint: 'http://localhost:11434',
+    ollamaModel: 'llama3'
+  };
+
+  const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);
+  const [customModel, setCustomModel] = useState(ollamaConfig.ollamaModel);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  useEffect(() => {
+    if (data?.ollamaConfig) {
+      setCustomEndpoint(data.ollamaConfig.ollamaEndpoint);
+      setCustomModel(data.ollamaConfig.ollamaModel);
+    }
+  }, [data?.ollamaConfig]);
+
+  const handleSaveOllamaConfig = async (newMode?: 'HYBRID_HEURISTIC' | 'PURE_OLLAMA') => {
+    setSavingConfig(true);
+    try {
+      const res = await updateTenantOllamaConfigAction({
+        evaluationMode: (newMode || ollamaConfig.evaluationMode) as 'HYBRID_HEURISTIC' | 'PURE_OLLAMA',
+        ollamaEndpoint: customEndpoint,
+        ollamaModel: customModel
+      });
+      if (res.success) {
+        mutate(['dashboardData', activeTenantId]);
+      }
+    } catch (err) {
+      console.error("Failed to save Ollama config:", err);
+    } finally {
+      setSavingConfig(false);
+    }
+  };
 
 
   
@@ -211,7 +261,18 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   ]);
 
   const assets = data?.assets || [];
-  const alerts = data?.alerts || [];
+  
+  // Deduplicate alerts by AssetId and Timestamp to avoid duplicate key warnings from sharded double-writes
+  const rawAlerts = data?.alerts || [];
+  const alerts: any[] = [];
+  const seenAlertKeys = new Set();
+  for (const a of rawAlerts) {
+    const key = `${a.AssetId}-${a.Timestamp}`;
+    if (!seenAlertKeys.has(key)) {
+      seenAlertKeys.add(key);
+      alerts.push(a);
+    }
+  }
   const chartData = data?.chartData || [];
   const isReallyLoading = isLoading && (!data || !data.assets || data.assets.length === 0);
 
@@ -297,11 +358,18 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         
         const resData = await res.json();
         if (res.ok) {
-          setSimulationLog(prev => [
-            ...prev,
-            `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
-            `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
-          ]);
+          if (resData.status === "EVALUATED") {
+            setSimulationLog(prev => [
+              ...prev,
+              `[RESPONSE ${res.status}] SUCCESS: ${resData.message}`
+            ]);
+          } else {
+            setSimulationLog(prev => [
+              ...prev,
+              `[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`,
+              `[QUEUE] Fallback SQS queue worker will process in 2-4 seconds.`
+            ]);
+          }
           if (scenario.payload.processName !== "teams.exe" && scenario.payload.processName !== "antigravity.exe") {
             audio.playAlarm();
           } else {
@@ -580,8 +648,25 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
             )}
           </div>
           <div className="flex items-center gap-4">
+            {isForcedDemo && (
+              <a 
+                href="/security"
+                className="text-[10px] font-mono px-3 py-1.5 border border-rose-800 bg-rose-950/20 text-rose-400 hover:text-white hover:bg-rose-900 transition-colors flex items-center gap-1.5"
+              >
+                PROCEED TO ENTERPRISE
+              </a>
+            )}
+            {isForcedDemo && (
+              /* eslint-disable-next-line @next/next/no-html-link-for-pages */
+              <a 
+                href="/"
+                className="text-[10px] font-mono px-3 py-1.5 border border-zinc-800 bg-zinc-950 text-zinc-500 hover:text-white hover:border-zinc-700 transition-colors flex items-center gap-1.5"
+              >
+                RETURN HOME
+              </a>
+            )}
             <a 
-              href="/dashboard"
+              href={isForcedDemo ? "/dashboard?demo=true" : "/dashboard"}
               className="text-[10px] font-mono px-3 py-1.5 border border-indigo-700 bg-indigo-950/20 text-indigo-400 hover:text-white hover:border-indigo-500 transition-colors flex items-center gap-1.5"
             >
               <Activity className="w-3 h-3" />
@@ -720,11 +805,19 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         {/* Telemetry Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <MetricCard icon={<Server />} title="ASSETS_TRACKED" value={assets.length} loading={isReallyLoading} />
-          <MetricCard icon={<Cpu />} title="ROGUE_MODELS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL' || a.RiskLevel === 'WARNING').length} loading={isReallyLoading} />
+          <MetricCard icon={<Cpu />} title="ROGUE_MODELS" value={alerts.filter((a: any) => {
+            if (a.RiskLevel !== 'CRITICAL' && a.RiskLevel !== 'WARNING') return false;
+            const asset = assets.find((as: any) => as.AssetId === a.AssetId);
+            return asset ? asset.Status !== 'ISOLATED' : true;
+          }).length} loading={isReallyLoading} />
           {isForcedDemo
             ? <MetricCard icon={<Activity />} title="SIMULATION_EVENTS" value={simulationCount} loading={false} />
             : <MetricCard icon={<Shield />} title="ISOLATED_HOSTS" value={assets.filter((a: any) => a.Status === 'ISOLATED').length} loading={isReallyLoading} />}
-          <MetricCard icon={<ShieldAlert />} title="ACTIVE_THREATS" value={alerts.filter((a: any) => a.RiskLevel === 'CRITICAL').length} loading={isReallyLoading} alert />
+          <MetricCard icon={<ShieldAlert />} title="ACTIVE_THREATS" value={alerts.filter((a: any) => {
+            if (a.RiskLevel !== 'CRITICAL') return false;
+            const asset = assets.find((as: any) => as.AssetId === a.AssetId);
+            return asset ? asset.Status !== 'ISOLATED' : true;
+          }).length} loading={isReallyLoading} alert />
         </div>
 
         {/* Network Egress Chart */}
@@ -1062,7 +1155,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
             {/* Simulation Console Card — demo only */}
             {isForcedDemo && (
-              <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[336px]">
+              <div className="bg-[#09090b] border border-zinc-800 flex flex-col h-[400px]">
                 <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
                   <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                     <Bot className="w-4 h-4 text-blue-500" />
@@ -1072,19 +1165,69 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 </div>
                 
                 <div className="p-3 flex flex-col flex-1 gap-2.5 justify-between">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Select Threat Vector</label>
-                    <select 
-                      value={selectedScenario}
-                      onChange={(e) => setSelectedScenario(e.target.value as any)}
-                      className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
-                    >
-                      {Object.entries(SCENARIOS).map(([key, val]) => (
-                        <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
-                          {val.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider">Select Threat Vector</label>
+                      <select 
+                        value={selectedScenario}
+                        onChange={(e) => setSelectedScenario(e.target.value as any)}
+                        className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1 text-xs font-mono text-gray-300 focus:outline-none focus:border-blue-800 rounded-none cursor-pointer"
+                      >
+                        {Object.entries(SCENARIOS).map(([key, val]) => (
+                          <option key={key} value={key} className="bg-[#09090b] text-gray-300 font-mono">
+                            {val.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="border border-zinc-800/80 bg-zinc-900/20 p-2 flex flex-col gap-2">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-1">
+                        <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Ollama Configuration</span>
+                        <button
+                          onClick={() => handleSaveOllamaConfig(ollamaConfig.evaluationMode === 'HYBRID_HEURISTIC' ? 'PURE_OLLAMA' : 'HYBRID_HEURISTIC')}
+                          disabled={savingConfig}
+                          className={`px-1.5 py-0.5 border text-[8px] font-mono transition-colors ${
+                            ollamaConfig.evaluationMode === 'PURE_OLLAMA'
+                              ? 'bg-amber-950/40 border-amber-900 text-amber-400 hover:bg-amber-900 hover:text-white cursor-pointer'
+                              : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700 cursor-pointer'
+                          }`}
+                        >
+                          {savingConfig ? 'SAVING...' : ollamaConfig.evaluationMode === 'PURE_OLLAMA' ? 'PURE OLLAMA' : 'HYBRID SIGNATURE'}
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[8px] font-mono text-zinc-500 uppercase">Endpoint</label>
+                          <input 
+                            type="text"
+                            value={customEndpoint}
+                            onChange={(e) => setCustomEndpoint(e.target.value)}
+                            placeholder="http://localhost:11434"
+                            className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <label className="text-[8px] font-mono text-zinc-500 uppercase">Model Name</label>
+                          <input 
+                            type="text"
+                            value={customModel}
+                            onChange={(e) => setCustomModel(e.target.value)}
+                            placeholder="llama3"
+                            className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleSaveOllamaConfig()}
+                        disabled={savingConfig}
+                        className="w-full bg-zinc-950 border border-zinc-800 text-[8px] font-mono py-1 text-zinc-400 hover:border-zinc-600 hover:text-white transition-colors cursor-pointer"
+                      >
+                        {savingConfig ? 'APPLYING CONFIG...' : 'APPLY LOCAL MODEL CONFIG'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Simulation Output Console */}
