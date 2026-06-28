@@ -12,6 +12,8 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const hasClerk = !skipClerk && publishableKey && publishableKey.startsWith("pk_");
   let userId: string | null = "user_mock_admin";
   let tenantId = "org_demo_123";
 
@@ -84,7 +86,7 @@ export default async function DashboardLayout({
 
         {/* User profile section */}
         <div className="pt-6 border-t border-zinc-900 flex items-center justify-between">
-          {!skipClerk ? (
+          {hasClerk ? (
             <div className="flex items-center gap-3 w-full">
               <div className="w-8 h-8 shrink-0 flex items-center justify-center">
                 <UserButton afterSignOutUrl="/" appearance={{

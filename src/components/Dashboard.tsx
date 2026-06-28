@@ -622,7 +622,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
               <span className="font-mono text-xs text-green-500">SYS_ONLINE</span>
             </div>
             <div className="w-px h-4 bg-zinc-800 mx-2" />
-            {process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" ? (
+            {(process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith("pk_")) ? (
               <div className="w-6 h-6 flex items-center justify-center shrink-0">
                 <UserButton afterSignOutUrl="/" appearance={{
                   variables: {
