@@ -252,6 +252,20 @@ export default function Tactical3DGrid({
                     }}
                   />
 
+                  {/* Back Face (Facing top-left along Y) */}
+                  <div
+                    className="absolute border border-zinc-950/20"
+                    style={{
+                      width: `${cellSize}px`,
+                      height: `${h}px`,
+                      transformOrigin: "top",
+                      transform: "rotateX(90deg)",
+                      top: 0,
+                      left: 0,
+                      backgroundColor: colorFront,
+                    }}
+                  />
+
                   {/* Right Face (Facing top-right along X) */}
                   <div
                     className="absolute border border-zinc-950/20"
@@ -261,6 +275,20 @@ export default function Tactical3DGrid({
                       transformOrigin: "right",
                       transform: "rotateY(90deg)",
                       right: 0,
+                      top: 0,
+                      backgroundColor: colorSide,
+                    }}
+                  />
+
+                  {/* Left Face (Facing bottom-left along X) */}
+                  <div
+                    className="absolute border border-zinc-950/20"
+                    style={{
+                      width: `${h}px`,
+                      height: `${cellSize}px`,
+                      transformOrigin: "left",
+                      transform: "rotateY(-90deg)",
+                      left: 0,
                       top: 0,
                       backgroundColor: colorSide,
                     }}
