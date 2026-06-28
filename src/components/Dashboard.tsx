@@ -1225,13 +1225,35 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <label className="text-[8px] font-mono text-zinc-500 uppercase">Model Name</label>
-                          <input 
-                            type="text"
-                            value={customModel}
-                            onChange={(e) => setCustomModel(e.target.value)}
-                            placeholder="llama3"
-                            className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900"
-                          />
+                          <select
+                            value={['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) ? customModel : 'custom'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'custom') {
+                                setCustomModel('');
+                              } else {
+                                setCustomModel(val);
+                              }
+                            }}
+                            className="bg-zinc-950 border border-zinc-800 px-1 py-0.5 text-[8px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 rounded-none cursor-pointer mb-1"
+                          >
+                            <option value="llama3" className="bg-[#09090b]">llama3</option>
+                            <option value="qwen2.5-coder:7b" className="bg-[#09090b]">qwen2.5-coder:7b</option>
+                            <option value="mistral" className="bg-[#09090b]">mistral</option>
+                            <option value="gemma" className="bg-[#09090b]">gemma</option>
+                            <option value="phi3" className="bg-[#09090b]">phi3</option>
+                            <option value="custom" className="bg-[#09090b]">Custom Model...</option>
+                          </select>
+                          
+                          {(!['llama3', 'qwen2.5-coder:7b', 'mistral', 'gemma', 'phi3'].includes(customModel) || customModel === '') && (
+                            <input 
+                              type="text"
+                              value={customModel}
+                              onChange={(e) => setCustomModel(e.target.value)}
+                              placeholder="Type custom model name..."
+                              className="bg-zinc-950 border border-zinc-800 px-1.5 py-0.5 text-[9px] font-mono text-zinc-300 focus:outline-none focus:border-blue-900 animate-fadeIn"
+                            />
+                          )}
                         </div>
                       </div>
 
