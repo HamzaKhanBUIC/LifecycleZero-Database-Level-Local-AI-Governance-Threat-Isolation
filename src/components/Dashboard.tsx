@@ -151,7 +151,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
       ollamaConfig: {
         evaluationMode: 'HYBRID_HEURISTIC',
         ollamaEndpoint: 'http://localhost:11434',
-        ollamaModel: 'auto'
+        ollamaModel: 'llama3'
       }
     }
   });
@@ -164,7 +164,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const ollamaConfig = data?.ollamaConfig || {
     evaluationMode: 'HYBRID_HEURISTIC',
     ollamaEndpoint: 'http://localhost:11434',
-    ollamaModel: 'auto'
+    ollamaModel: 'llama3'
   };
 
   const [customEndpoint, setCustomEndpoint] = useState(ollamaConfig.ollamaEndpoint);

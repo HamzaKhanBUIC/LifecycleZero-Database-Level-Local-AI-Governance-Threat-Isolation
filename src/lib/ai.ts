@@ -203,37 +203,7 @@ Telemetry Data:
 Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITICAL", "reasoning": "1 sentence explanation."}`;
 
   const host = endpoint || env("OLLAMA_HOST", "http://localhost:11434");
-  let modelName = model || env("OLLAMA_MODEL", "auto");
-  if (!modelName || modelName === "auto") {
-    try {
-      const tagsURL = `${host.replace(/\/$/, "")}/api/tags`;
-      const tagsRes = await fetch(tagsURL, { method: "GET", signal: AbortSignal.timeout(2000) });
-      if (tagsRes.ok) {
-        const tagsData = await tagsRes.json();
-        const modelsList = tagsData.models || [];
-        if (modelsList.length > 0) {
-          const preferredKeywords = ["coder", "qwen", "llama", "mistral", "gemma", "phi"];
-          let detectedModel = "";
-          for (const keyword of preferredKeywords) {
-            const found = modelsList.find((m: any) => m.name.toLowerCase().includes(keyword));
-            if (found) {
-              detectedModel = found.name;
-              break;
-            }
-          }
-          modelName = detectedModel || modelsList[0].name;
-          console.log(`[OLLAMA AUTO-DETECT] Successfully selected installed model: '${modelName}'`);
-        } else {
-          modelName = "qwen2.5-coder:7b";
-        }
-      } else {
-        modelName = "qwen2.5-coder:7b";
-      }
-    } catch (err) {
-      console.warn("[OLLAMA AUTO-DETECT] Failed to fetch installed models, falling back to qwen2.5-coder:7b:", err);
-      modelName = "qwen2.5-coder:7b";
-    }
-  }
+  const modelName = model || env("OLLAMA_MODEL", "llama3");
   const apiURL = `${host.replace(/\/$/, "")}/api/generate`;
 
   const response = await fetch(apiURL, {
