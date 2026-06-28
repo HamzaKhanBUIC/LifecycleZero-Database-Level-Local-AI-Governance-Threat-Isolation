@@ -154,7 +154,8 @@ async function pollAwsQueue() {
     const response = await sqsClient.send(new ReceiveMessageCommand({
       QueueUrl: queueUrl,
       MaxNumberOfMessages: 10,
-      WaitTimeSeconds: 5
+      WaitTimeSeconds: 5,
+      AttributeNames: ["All"]
     }));
 
     const messages = response.Messages || [];
@@ -164,6 +165,20 @@ async function pollAwsQueue() {
 
     for (const msg of messages) {
       if (!msg.Body) continue;
+
+      const receiveCount = Number(msg.Attributes?.ApproximateReceiveCount || 1);
+      if (receiveCount > 5) {
+        console.error(`[WORKER CRITICAL] SQS message ${msg.MessageId} failed processing ${receiveCount} times. Quarantine triggered, discarding poison pill.`);
+        try {
+          await sqsClient.send(new DeleteMessageCommand({
+            QueueUrl: queueUrl,
+            ReceiptHandle: msg.ReceiptHandle
+          }));
+        } catch (delErr) {
+          console.error(`[WORKER ERROR] Failed to delete quarantined message:`, delErr);
+        }
+        continue;
+      }
       
       const payload = JSON.parse(msg.Body);
       try {
@@ -175,7 +190,7 @@ async function pollAwsQueue() {
           ReceiptHandle: msg.ReceiptHandle
         }));
       } catch (err) {
-        console.error(`[WORKER ERROR] Processing failed for SQS message ${msg.MessageId}:`, err);
+        console.error(`[WORKER ERROR] Processing failed for SQS message ${msg.MessageId} (Attempt ${receiveCount}):`, err);
       }
     }
   } catch (err) {

@@ -22,8 +22,48 @@ interface RateEntry {
 
 const ipStore = new Map<string, RateEntry>();
 
-function isRateLimited(ip: string): { limited: boolean; retryAfterMs: number } {
+async function isRateLimited(ip: string): Promise<{ limited: boolean; retryAfterMs: number }> {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
   const now = Date.now();
+  const windowBucket = Math.floor(now / 10000); // 10-second fixed window
+  const key = `ratelimit:${ip}:${windowBucket}`;
+
+  if (redisUrl && redisToken) {
+    try {
+      // Zero-dependency REST pipeline call to Upstash Redis (Edge runtime compatible)
+      const res = await fetch(`${redisUrl.replace(/\/$/, "")}/pipeline`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${redisToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify([
+          ["INCR", key],
+          ["EXPIRE", key, 10]
+        ]),
+        // Prevent Vercel middleware from caching the rate-limit check response
+        cache: "no-store"
+      });
+
+      if (res.ok) {
+        const pipelineRes = await res.json();
+        const count = Number(pipelineRes[0]?.result || 1);
+        if (count > RATE_LIMIT_MAX_REQUESTS) {
+          const retryAfterMs = (windowBucket + 1) * 10000 - now;
+          return { limited: true, retryAfterMs: Math.max(0, retryAfterMs) };
+        }
+        return { limited: false, retryAfterMs: 0 };
+      } else {
+        console.warn("[MIDDLEWARE WARNING] Upstash Redis REST pipeline failed. Status:", res.status);
+      }
+    } catch (err) {
+      console.error("[MIDDLEWARE ERROR] Upstash Redis rate limit exception. Falling back to local store:", err);
+    }
+  }
+
+  // Local sliding window fallback (isolated per edge instance)
   const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
   if (!ipStore.has(ip)) {
@@ -31,11 +71,9 @@ function isRateLimited(ip: string): { limited: boolean; retryAfterMs: number } {
   }
 
   const entry = ipStore.get(ip)!;
-  // Evict timestamps outside the current window
   entry.timestamps = entry.timestamps.filter((t) => t > windowStart);
 
   if (entry.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    // Earliest timestamp determines when the window resets for this IP
     const oldestTimestamp = entry.timestamps[0];
     const retryAfterMs = oldestTimestamp + RATE_LIMIT_WINDOW_MS - now;
     return { limited: true, retryAfterMs: Math.max(0, retryAfterMs) };
@@ -60,7 +98,7 @@ async function middleware(req: NextRequest) {
       req.headers.get("x-real-ip") ||
       "unknown";
 
-    const { limited, retryAfterMs } = isRateLimited(ip);
+    const { limited, retryAfterMs } = await isRateLimited(ip);
     if (limited) {
       return NextResponse.json(
         {
