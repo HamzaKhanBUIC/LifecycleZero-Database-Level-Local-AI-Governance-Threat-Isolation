@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield } from "lucide-react";
-import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
+import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield, LogOut, Home } from "lucide-react";
+import { UserButton, OrganizationSwitcher, SignOutButton } from "@clerk/nextjs";
 import { getTenantContext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -110,23 +110,34 @@ export default async function DashboardLayout({
               AI THREAT CONSOLE
             </Link>
           </div>
-          {isDemoMode && (
-            <div className="pt-4 mt-4 border-t border-zinc-900 flex flex-col gap-1.5">
-              <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-1">Demo Controls</p>
-              <Link
-                href="/security"
-                className="flex items-center gap-3 px-3 py-2 rounded text-[10px] font-mono text-rose-400 hover:text-white hover:bg-rose-950/20 transition border border-transparent hover:border-zinc-800"
-              >
-                PROCEED TO ENTERPRISE
-              </Link>
+
+          <div className="pt-4 mt-4 border-t border-zinc-900 flex flex-col gap-1.5">
+            <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold px-3 mb-1">System</p>
+            <Link
+              href="/"
+              className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
+            >
+              <Home className="h-4 w-4" />
+              RETURN TO HOME
+            </Link>
+            
+            {hasClerk ? (
+              <SignOutButton redirectUrl="/">
+                <button className="w-full text-left flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800 cursor-pointer">
+                  <LogOut className="h-4 w-4" />
+                  LOG OUT
+                </button>
+              </SignOutButton>
+            ) : (
               <Link
                 href="/"
-                className="flex items-center gap-3 px-3 py-2 rounded text-[10px] font-mono text-zinc-500 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
+                className="flex items-center gap-3 px-3 py-2 rounded text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-900/50 transition border border-transparent hover:border-zinc-800"
               >
-                RETURN HOME
+                <LogOut className="h-4 w-4" />
+                LOG OUT
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </nav>
 
         {/* User profile section */}
