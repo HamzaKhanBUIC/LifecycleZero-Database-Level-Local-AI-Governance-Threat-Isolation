@@ -2,6 +2,8 @@ import { execSync } from "child_process";
 import os from "os";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 
 dotenv.config({ path: ".env.local" });
 
@@ -9,6 +11,8 @@ const INGEST_URL = process.env.INGEST_URL || "http://localhost:3000/api/ingest";
 const TENANT_ID = process.env.TENANT_ID || "org_demo_123";
 const ASSET_ID = process.argv[2] || "AST-M3PRO-001"; // Alice Chen's MacBook Pro
 const AGENT_KEY = process.argv[3] || process.env.AGENT_API_KEY || "demo_agent_key_99";
+
+const KEY_FILE = path.join(process.cwd(), `scripts/agent-${ASSET_ID}.key`);
 
 // Benign vs Threat processes we want to detect
 const BENIGN_PROCESSES = ["chrome.exe", "vscode.exe", "docker", "slack", "zoom", "node.exe", "powershell.exe"];
@@ -93,6 +97,15 @@ async function runAgent() {
   const hardwareUuid = getHardwareUuid();
   let activeAgentKey = AGENT_KEY;
 
+  if (fs.existsSync(KEY_FILE)) {
+    try {
+      activeAgentKey = fs.readFileSync(KEY_FILE, "utf8").trim();
+      console.log(`🔑 [KEY LOAD] Loaded persisted rotated key from local storage.`);
+    } catch {
+      console.warn("⚠️ Failed to read persisted agent key, using default.");
+    }
+  }
+
   console.log(`🔒 LifecycleZero Endpoint Agent starting on host: ${os.hostname()}...`);
   console.log(`📡 Hardware UUID: ${hardwareUuid}`);
   console.log(`📡 Targeting Ingest API: ${INGEST_URL}`);
@@ -170,6 +183,12 @@ async function runAgent() {
         if (data.agentKey && data.agentKey !== activeAgentKey) {
           console.log(`🔑 [CREDENTIAL ROTATION] Server issued unique device-specific agent key: ${data.agentKey}`);
           activeAgentKey = data.agentKey;
+          try {
+            fs.writeFileSync(KEY_FILE, activeAgentKey, "utf8");
+            console.log(`🔑 [KEY SAVE] Saved rotated key to local storage: ${KEY_FILE}`);
+          } catch (err) {
+            console.error("❌ Failed to persist rotated agent key:", err);
+          }
         }
       } else if (response.status === 403 && data.error === "FORBIDDEN_ISOLATED") {
         console.error(`❌ HOST ISOLATION ENFORCED: Ingestion API blocked this machine. Network egress restricted.`);
