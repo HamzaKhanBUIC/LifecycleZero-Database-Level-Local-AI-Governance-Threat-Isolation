@@ -21,18 +21,24 @@ We built the backend to scale easily on AWS and run with a zero-idle database co
 
 ### The Database: DynamoDB Single-Table Design
 We put all our B2B data (tenant settings, employee directories, hardware specs, logs, and audit trails) into a single DynamoDB table called `LifecycleZero_Assets`.
-*   **B2B Tenant Isolation**: We separate each company's data by prefixing the partition keys (`PK = TENANT#<TenantId>`). The server reads the tenant ID directly from secure Clerk authentication tokens, so data can never leak between customers.
-*   **Cost-Efficient Sparse Index**: 99% of logs are normal. If we indexed every single ping, our database costs would skyrocket. Instead, we created a Sparse Index (`GSI2`) that only indexes events marked as warnings or critical alerts. This makes loading the alerts page on the dashboard cheap and fast.
-*   **Write Sharding**: We split telemetry logs across 10 shards (`PK = TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) using a hash of the device ID. This prevents database write bottlenecks when many devices report status at the same time.
-*   **Atomic Isolation Transactions**: When an administrator isolates a device, the system runs an atomic transaction (`TransactWriteItems`) that checks if the device is active, marks it as `ISOLATED`, and writes an unchangeable audit log detailing who isolated it and why.
+*   **B2B Tenant Isolation**: We separate each company's data by prefixing the partition keys:
+    $$\text{Partition Key (PK)} = \text{"TENANT\#"} + \text{TenantId}$$
+    The server reads the tenant ID directly from secure Clerk authentication tokens, so data can never leak between customers.
+*   **Cost-Efficient Sparse Index**: 99% of logs are normal. If we indexed every single ping, our database costs would skyrocket. Instead, we created a Sparse Index ($GSI2$) that only indexes events marked as warnings or critical alerts. This makes loading the alerts page on the dashboard cheap and fast:
+    $$\text{Index Scan Cost} = \mathcal{O}(1)$$
+*   **Write Sharding**: We split telemetry logs across 10 shards using a hash of the device ID:
+    $$S(a) = \left( \sum_{i=1}^{n} \text{char}(a_i) \cdot 31^{n-i} \right) \pmod{10}$$
+    where $a$ is the $\text{AssetId}$. This prevents database write bottlenecks when many devices report status at the same time.
+*   **Atomic Isolation Transactions**: When an administrator isolates a device, the system runs an atomic transaction ($TransactWriteItems$) that checks if the device is active, marks it as $\text{"ISOLATED"}$, and writes an unchangeable audit log detailing who isolated it and why.
 
 ### Ingestion & SQS Queue
-*   **Amazon SQS Buffer**: Instead of writing telemetry directly to the database (which could crash under heavy load), the API writes logs straight to an SQS queue and returns a fast `202 Accepted` response in under 50ms.
-*   **Queue Worker & Quarantine**: A TypeScript worker processes logs from the queue. If a corrupt message fails to process 5 times, it gets quarantined and deleted automatically so it doesn't clog the queue.
+*   **Amazon SQS Buffer**: Instead of writing telemetry directly to the database (which could crash under heavy load), the API writes logs straight to an SQS queue and returns a fast $202\text{ Accepted}$ response in under $50\text{ms}$.
+*   **Queue Worker & Quarantine**: A TypeScript worker processes logs from the queue. If a corrupt message fails to process 5 times (based on the SQS $ApproximateReceiveCount$), it gets quarantined and deleted automatically.
 
 ### Edge Proxy & Security Checks
 *   **Edge Rate Limiting**: Our Vercel Edge Middleware checks request rates using an API call to Upstash Redis, preventing API spam before it hits our serverless routes.
-*   **Cryptographic Key Rotation**: The first time an agent runs, it registers using a global enrollment key. The server registers the device, generates a unique, device-specific key, and returns it. The agent saves this key locally and signs all future pings using HMAC-SHA256. 
+*   **Cryptographic Key Rotation**: The first time an agent runs, it registers using a global enrollment key. The server registers the device, generates a unique, device-specific key, and returns it. The agent saves this key locally and signs all future pings using HMAC-SHA256:
+    $$\text{HMAC}(k, m) = \text{SHA256}\Big((k \oplus \text{opad}) \mathbin{\Vert} \text{SHA256}\big((k \oplus \text{ipad}) \mathbin{\Vert} m\big)\Big)$$
 *   **Hardware UUID Lock**: The agent checks the motherboard BIOS UUID on startup. If a spoofed device tries to copy the agent's key, the signature check fails because the hardware UUID does not match.
 
 ---
@@ -52,11 +58,13 @@ We wanted the UI to look and feel like a modern security dashboard:
 
 *   **Compliance Ready**: Regulations like the EU AI Act require companies to audit how AI is used and penalize companies heavily for compliance failures. LifecycleZero provides downloadable CSV and JSON audit logs to satisfy compliance requirements.
 *   **Easy Onboarding**: Built with Clerk B2B organization portals. Admins sign in, invite their team, and get their enrollment key instantly.
-*   **SaaS Pricing Model**: 
-    *   Target pricing: $8.00 per monitored device per month.
-    *   For a 200-device client: Monthly revenue is **$1,600.00**.
-    *   Serverless infrastructure cost (AWS SQS, DynamoDB, Upstash, hosting): **$66.87/month**.
-    *   **Gross Margin: 95.8%**.
+*   **SaaS Pricing Model & Unit Economics**: 
+    *   Target pricing: $P = \$8.00$ per monitored device per month.
+    *   For a client with $N = 200$ devices, monthly revenue ($R_t$) is:
+        $$R_t = N \times P = 200 \times 8 = \$1,600.00$$
+    *   Serverless infrastructure cost ($C_t$): **$66.87/month**.
+    *   **Gross Margin ($M_g$)**:
+        $$M_g = \frac{R_t - C_t}{R_t} \times 100\% = 95.82\%$$
 
 ---
 
