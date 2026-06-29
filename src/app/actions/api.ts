@@ -754,11 +754,12 @@ export async function getTenantMetadataAction() {
     const metadata = await getTenantMetadata(tenantId || "org_demo_123");
     
     // Fallback if metadata not seeded
-    const fallbackMetadata = {
+    const fallbackMetadata: Tenant = {
       PK: `TENANT#${tenantId || "org_demo_123"}`,
       SK: "METADATA",
       TenantName: "Acme Corp Remote",
       TenantSlug: "acme-corp",
+      CreatedAt: new Date().toISOString(),
       Status: "ACTIVE" as const,
       Plan: "FREE_TIER" as const,
       MaxAllowedEndpoints: 150

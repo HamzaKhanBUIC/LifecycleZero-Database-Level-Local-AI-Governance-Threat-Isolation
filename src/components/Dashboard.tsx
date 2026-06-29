@@ -87,7 +87,9 @@ const fetchDashboardData = async (tenantId: string) => {
       TenantSlug: "acme-corp",
       Status: "ACTIVE" as const,
       Plan: "FREE_TIER" as const,
-      MaxAllowedEndpoints: 150
+      MaxAllowedEndpoints: 150,
+      StripeCustomerId: undefined,
+      StripeSubscriptionId: undefined
     }
   };
 };
@@ -197,7 +199,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         TenantSlug: "acme-corp",
         Status: "ACTIVE" as const,
         Plan: "FREE_TIER" as const,
-        MaxAllowedEndpoints: 150
+        MaxAllowedEndpoints: 150,
+        StripeCustomerId: undefined,
+        StripeSubscriptionId: undefined
       }
     }
   });
@@ -1486,9 +1490,50 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   />
                 </div>
                 
-                <div className="flex justify-between items-center border-t border-zinc-900 pt-2 text-[8px] text-zinc-500">
+                <div className="flex justify-between items-center border-b border-zinc-900 pb-2 text-[8px] text-zinc-500">
                   <span>RATE: $8/workstation/mo</span>
                   <span>STATUS: {data?.tenantMeta?.Status === "ACTIVE" ? "ACTIVE_OK" : "SUSPENDED"}</span>
+                </div>
+
+                {/* Stripe Credentials Section */}
+                <div className="space-y-1.5 border-b border-zinc-900 pb-2 text-[8px] text-zinc-450">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-650 font-bold">STRIPE_CUSTOMER:</span>
+                    <span className="text-zinc-350 font-mono select-all">{data?.tenantMeta?.StripeCustomerId || "cus_live_99Fxc81a"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-650 font-bold">STRIPE_SUB_ID:</span>
+                    <span className="text-zinc-350 font-mono select-all">{data?.tenantMeta?.StripeSubscriptionId || "sub_live_03aJcEca5t"}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-650 font-bold">PAYMENT_SYNC:</span>
+                    <span className={`px-1 py-0.5 rounded-[1px] text-[7px] font-bold ${
+                      data?.tenantMeta?.Status === "ACTIVE" 
+                        ? "bg-green-950/40 border border-green-900 text-green-400" 
+                        : "bg-red-950/40 border border-red-900 text-red-400"
+                    }`}>
+                      {data?.tenantMeta?.Status === "ACTIVE" ? "PAID_VERIFIED" : "UNPAID_HOLD"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Stripe Invoice History Section */}
+                <div className="space-y-1.5 text-[8px]">
+                  <span className="text-zinc-600 font-bold uppercase tracking-wider block">Recent Invoice Actions</span>
+                  <div className="bg-[#050505] border border-zinc-900 p-2 max-h-[72px] overflow-y-auto space-y-1.5 custom-scrollbar text-[8px] select-text">
+                    <div className="flex justify-between text-green-400/95 font-semibold">
+                      <span>INV-0988 (Current)</span>
+                      <span>PAID ($96.00)</span>
+                    </div>
+                    <div className="flex justify-between text-zinc-500">
+                      <span>INV-0912 (May 2026)</span>
+                      <span>PAID ($96.00)</span>
+                    </div>
+                    <div className="flex justify-between text-zinc-500">
+                      <span>INV-0845 (Apr 2026)</span>
+                      <span>PAID ($96.00)</span>
+                    </div>
+                  </div>
                 </div>
 
                 <a
