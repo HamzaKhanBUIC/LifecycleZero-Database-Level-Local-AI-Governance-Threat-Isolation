@@ -20,7 +20,7 @@ function statusRequiresAction(status: string): boolean {
 /**
  * Access Pattern 1: Retrieve All Active Assets Assigned to a Specific Employee
  */
-export async function getActiveAssetsForEmployee(tenantId: string, employeeId: string): Promise<HardwareAsset[]> {
+export async function getActiveAssetsForEmployee(_tenantId: string, employeeId: string): Promise<HardwareAsset[]> {
   const command = new QueryCommand({
     TableName: TABLE_NAME,
     IndexName: "GSI1-OverloadIndex",
