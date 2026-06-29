@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
 import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction, upgradeTenantPlanAction, LifecycleZeroAPI } from "@/lib/api";
-import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard } from "lucide-react";
+import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard, Loader2 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Tactical3DGrid from "./Tactical3DGrid";
@@ -1172,9 +1172,16 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                     <button
                       onClick={handleBulkIsolate}
                       disabled={bulkIsolating}
-                      className="font-mono text-[9px] px-2 py-0.5 border border-red-800 text-red-400 bg-red-950/20 hover:bg-red-800 hover:text-white transition-colors disabled:opacity-50"
+                      className="font-mono text-[9px] px-2 py-0.5 border border-red-800 text-red-400 bg-red-950/20 hover:bg-red-800 hover:text-white transition-colors disabled:opacity-50 flex items-center gap-1"
                     >
-                      {bulkIsolating ? 'ISOLATING...' : `ISOLATE ${selectedAssetIds.size}`}
+                      {bulkIsolating ? (
+                        <>
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          <span>ISOLATING...</span>
+                        </>
+                      ) : (
+                        `ISOLATE ${selectedAssetIds.size}`
+                      )}
                     </button>
                   )}
                 </div>
@@ -1315,13 +1322,20 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   <button
                     onClick={() => { handleInjectTelemetry(); }}
                     disabled={simulating}
-                    className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold ${
+                    className={`w-full font-mono text-xs py-2 border text-center transition-colors font-bold flex items-center justify-center gap-1.5 ${
                       simulating 
                         ? 'bg-zinc-800 border-zinc-700 text-zinc-500 cursor-not-allowed' 
                         : 'bg-blue-950/40 border-blue-900 text-blue-400 hover:bg-blue-900 hover:text-white cursor-pointer'
                     }`}
                   >
-                    {simulating ? "INJECTING TELEMETRY..." : "RUN THREAT SIMULATION"}
+                    {simulating ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>INJECTING TELEMETRY...</span>
+                      </>
+                    ) : (
+                      "RUN THREAT SIMULATION"
+                    )}
                   </button>
                 </div>
               </div>
@@ -1436,9 +1450,16 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 <button
                   onClick={() => handleSaveOllamaConfig()}
                   disabled={savingConfig}
-                  className="w-full bg-zinc-950 border border-zinc-800 text-[8px] font-mono py-1 text-zinc-400 hover:border-zinc-600 hover:text-white transition-colors cursor-pointer"
+                  className="w-full bg-zinc-950 border border-zinc-800 text-[8px] font-mono py-1 text-zinc-400 hover:border-zinc-600 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  {savingConfig ? 'APPLYING CONFIG...' : 'APPLY LOCAL MODEL CONFIG'}
+                  {savingConfig ? (
+                    <>
+                      <Loader2 className="w-2.5 h-2.5 animate-spin text-zinc-400" />
+                      <span>APPLYING CONFIG...</span>
+                    </>
+                  ) : (
+                    'APPLY LOCAL MODEL CONFIG'
+                  )}
                 </button>
               </div>
             </div>
@@ -1712,8 +1733,8 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 >
                   {isUpgrading ? (
                     <>
-                      <span className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin"></span>
-                      PROCESSING...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>AUTHORIZING TRANSACTION...</span>
                     </>
                   ) : (
                     'CONFIRM UPGRADE ($1,200/mo)'
@@ -1762,8 +1783,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                     setModalReason(e.target.value);
                     if (e.target.value.trim() !== "") setReasonError(false);
                   }}
+                  disabled={isolatingId !== null}
                   placeholder="Enter justification for network severance (e.g., Rogue local process ollama accessing payroll backup)..."
-                  className={`w-full bg-[#050505] border text-xs font-mono p-3 focus:outline-none h-20 text-red-100 rounded-sm transition-colors ${
+                  className={`w-full bg-[#050505] border text-xs font-mono p-3 focus:outline-none h-20 text-red-100 rounded-sm transition-colors disabled:opacity-50 ${
                     reasonError ? 'border-red-500 focus:border-red-400' : 'border-red-900/40 focus:border-red-600'
                   }`}
                 />
@@ -1785,7 +1807,8 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   setModalReason("");
                   setReasonError(false);
                 }}
-                className="flex-1 py-2 font-mono text-xs border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors cursor-pointer"
+                disabled={isolatingId !== null}
+                className="flex-1 py-2 font-mono text-xs border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 CANCEL
               </button>
@@ -1797,15 +1820,27 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   }
                   const assetToIsolate = confirmIsolate;
                   const reasonToSend = modalReason;
-                  setConfirmIsolate(null);
-                  setModalReason("");
-                  setReasonError(false);
-                  await handleIsolate(assetToIsolate.AssetId, reasonToSend);
-                  setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ISOLATED" } : null);
+                  try {
+                    await handleIsolate(assetToIsolate.AssetId, reasonToSend);
+                    setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ISOLATED" } : null);
+                    setConfirmIsolate(null);
+                    setModalReason("");
+                    setReasonError(false);
+                  } catch (e) {
+                    console.error("Modal isolation failed:", e);
+                  }
                 }}
-                className="flex-1 py-2 font-mono text-xs font-bold bg-red-950/50 text-red-500 hover:bg-red-900 hover:text-white transition-colors border border-red-900/50 hover:border-red-500 cursor-pointer"
+                disabled={isolatingId !== null}
+                className="flex-1 py-2 font-mono text-xs font-bold bg-red-950/50 text-red-500 hover:bg-red-900 hover:text-white transition-colors border border-red-900/50 hover:border-red-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
-                CONFIRM ISOLATION
+                {isolatingId === confirmIsolate.AssetId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>SEVERING NETWORK...</span>
+                  </>
+                ) : (
+                  <span>CONFIRM ISOLATION</span>
+                )}
               </button>
             </div>
           </div>
