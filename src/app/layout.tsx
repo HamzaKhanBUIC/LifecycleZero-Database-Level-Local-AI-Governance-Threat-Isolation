@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
     "B2B SaaS platform for monitoring local AI governance threats, hardware procurement lifecycle, and database-level endpoint isolation.",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -37,9 +38,9 @@ export default async function RootLayout({
 
   // Only wrap with ClerkProvider when Clerk is explicitly enabled AND a valid key exists
   if (!skipClerk && publishableKey && publishableKey.startsWith("pk_")) {
-    const { ClerkProvider } = await import("@clerk/nextjs");
-    return <ClerkProvider>{content}</ClerkProvider>;
+    return <ClerkProvider publishableKey={publishableKey}>{content}</ClerkProvider>;
   }
 
   return content;
 }
+
