@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction, upgradeTenantPlanAction } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -230,6 +230,14 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     status: 'idle' | 'success' | 'error';
     message: string;
   }>({ status: 'idle', message: '' });
+
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (data?.ollamaConfig && lastTenantRef.current !== activeTenantId) {
@@ -1536,14 +1544,30 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                   </div>
                 </div>
 
-                <a
-                  href="https://stripe.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-zinc-950 border border-zinc-850 hover:border-indigo-900 hover:text-indigo-400 text-center font-bold py-1.5 text-zinc-450 hover:bg-indigo-950/20 transition-all cursor-pointer rounded-sm"
-                >
-                  MANAGE B2B SUBSCRIPTION
-                </a>
+                {data?.tenantMeta?.Plan === "ENTERPRISE" ? (
+                  <a
+                    href="https://stripe.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-zinc-950 border border-zinc-850 hover:border-indigo-900 hover:text-indigo-400 text-center font-bold py-1.5 text-zinc-450 hover:bg-indigo-950/20 transition-all cursor-pointer rounded-sm"
+                  >
+                    MANAGE B2B SUBSCRIPTION
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setCardNumber('');
+                      setCardExpiry('');
+                      setCardCvc('');
+                      setCardName('');
+                      setPaymentError(null);
+                      setShowPaymentModal(true);
+                    }}
+                    className="w-full bg-indigo-650 hover:bg-indigo-700 text-white font-bold py-1.5 text-center text-[9px] font-mono cursor-pointer transition-all uppercase tracking-widest rounded-sm border border-indigo-600 shadow-[0_0_15px_rgba(99,102,241,0.25)] hover:shadow-[0_0_20px_rgba(99,102,241,0.45)]"
+                  >
+                    ⚡ UPGRADE TO ENTERPRISE
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1552,6 +1576,176 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
       </div>
       </div>
       
+      {/* Stripe Payment & Quota Upgrade Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fadeIn">
+          <div className="max-w-md w-full bg-[#09090b] border border-indigo-900/50 shadow-[0_0_50px_-12px_rgba(99,102,241,0.25)] flex flex-col">
+            
+            {/* Header */}
+            <div className="bg-indigo-950/40 border-b border-indigo-900/50 p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-5 h-5 text-indigo-500 animate-pulse" />
+                <h2 className="text-indigo-400 font-mono font-bold text-sm tracking-widest uppercase">Secure Stripe Gateway</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  audio.playClick();
+                  setShowPaymentModal(false);
+                }}
+                className="text-zinc-500 hover:text-white font-mono text-xs cursor-pointer bg-transparent border-none focus:outline-none"
+              >
+                [X]
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div className="p-5 space-y-4 font-mono text-[10px]">
+              <div className="text-zinc-400 leading-relaxed text-[9px] border-b border-zinc-900 pb-3">
+                Upgrade to the <span className="text-indigo-400 font-bold">ENTERPRISE PLAN</span> to expand your active monitored fleet from <span className="text-zinc-100 font-bold">5</span> to <span className="text-indigo-400 font-bold">150 endpoints</span>. Billing is structured at $8/workstation/month.
+              </div>
+              
+              <div className="space-y-3">
+                {/* Cardholder Name */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[8px] text-zinc-500 uppercase tracking-wider">Cardholder Name</label>
+                  <input 
+                    type="text"
+                    value={cardName}
+                    onChange={(e) => setCardName(e.target.value)}
+                    placeholder="e.g. John Doe"
+                    className="bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-300 focus:outline-none focus:border-indigo-700 text-[10px] rounded-none"
+                  />
+                </div>
+
+                {/* Card Number */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[8px] text-zinc-500 uppercase tracking-wider">Card Number</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      maxLength={19}
+                      value={cardNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\s?/g, '').replace(/(\d{4})/g, '$1 ').trim();
+                        setCardNumber(val);
+                      }}
+                      placeholder="4242 4242 4242 4242"
+                      className="w-full bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-300 focus:outline-none focus:border-indigo-700 text-[10px] pr-8 rounded-none"
+                    />
+                    <span className="absolute right-2.5 top-2 text-zinc-650 font-bold text-[8px] uppercase select-none">Stripe</span>
+                  </div>
+                </div>
+
+                {/* Expiry and CVC */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[8px] text-zinc-500 uppercase tracking-wider">Expiration Date</label>
+                    <input 
+                      type="text"
+                      maxLength={5}
+                      value={cardExpiry}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\//g, '');
+                        if (val.length >= 2) {
+                          val = val.substring(0, 2) + '/' + val.substring(2);
+                        }
+                        setCardExpiry(val);
+                      }}
+                      placeholder="MM/YY"
+                      className="bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-300 focus:outline-none focus:border-indigo-700 text-[10px] rounded-none"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[8px] text-zinc-500 uppercase tracking-wider">CVC</label>
+                    <input 
+                      type="password"
+                      maxLength={3}
+                      value={cardCvc}
+                      onChange={(e) => setCardCvc(e.target.value.replace(/\D/g, ''))}
+                      placeholder="***"
+                      className="bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-300 focus:outline-none focus:border-indigo-700 text-[10px] tracking-widest rounded-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Error logs */}
+              {paymentError && (
+                <div className="bg-red-950/20 border border-red-900 text-red-400 p-2 text-[9px]">
+                  [STRIPE_ERR] {paymentError}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    audio.playClick();
+                    setShowPaymentModal(false);
+                  }}
+                  className="flex-1 bg-zinc-950 border border-zinc-850 text-zinc-500 hover:text-white py-1.5 cursor-pointer text-center text-[9px] uppercase tracking-wider rounded-none"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isUpgrading}
+                  onClick={async () => {
+                    audio.playClick();
+                    if (!cardName.trim()) {
+                      setPaymentError("Cardholder name is required.");
+                      return;
+                    }
+                    const cleanCard = cardNumber.replace(/\s/g, '');
+                    if (cleanCard !== '4242424242424242') {
+                      setPaymentError("Invalid card number. Please use the Stripe testing card: 4242 4242 4242 4242");
+                      return;
+                    }
+                    if (cardExpiry.length < 5 || cardCvc.length < 3) {
+                      setPaymentError("Invalid expiration date or security code (CVC).");
+                      return;
+                    }
+                    
+                    setPaymentError(null);
+                    setIsUpgrading(true);
+                    try {
+                      // Perform client-side simulated delay (Stripe checkout handshake)
+                      await new Promise(resolve => setTimeout(resolve, 2000));
+                      
+                      // Upgrade plan in database
+                      const res = await upgradeTenantPlanAction(activeTenantId);
+                      if (res.success) {
+                        mutate(['dashboardData', activeTenantId]);
+                        setShowPaymentModal(false);
+                        audio.playClick(); // play feedback sound
+                      } else {
+                        setPaymentError(res.error || "Failed to finalize subscription updates.");
+                      }
+                    } catch (err: any) {
+                      setPaymentError(err.message || "An unexpected transaction error occurred.");
+                    } finally {
+                      setIsUpgrading(false);
+                    }
+                  }}
+                  className="flex-1 bg-indigo-650 hover:bg-indigo-700 text-white font-bold py-1.5 cursor-pointer text-center text-[9px] uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-1.5 rounded-none"
+                >
+                  {isUpgrading ? (
+                    <>
+                      <span className="w-2 h-2 border border-white border-t-transparent rounded-full animate-spin"></span>
+                      PROCESSING...
+                    </>
+                  ) : (
+                    'CONFIRM UPGRADE ($1,200/mo)'
+                  )}
+                </button>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
       {/* T07: Isolation Confirmation Modal */}
       {confirmIsolate && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">

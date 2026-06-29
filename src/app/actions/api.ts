@@ -778,4 +778,34 @@ export async function getTenantMetadataAction() {
   }
 }
 
+/**
+ * Server action to upgrade Tenant plan to Enterprise directly via mock portal
+ */
+export async function upgradeTenantPlanAction(tenantId: string) {
+  const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
+  try {
+    const { PutCommand } = await import("@aws-sdk/lib-dynamodb");
+    
+    await docClient.send(new PutCommand({
+      TableName: TABLE_NAME,
+      Item: {
+        PK: `TENANT#${tenantId}`,
+        SK: "METADATA",
+        TenantName: "Sandbox Enterprise",
+        TenantSlug: "sandbox-ent",
+        CreatedAt: new Date().toISOString(),
+        Status: "ACTIVE",
+        Plan: "ENTERPRISE",
+        MaxAllowedEndpoints: 150,
+        StripeCustomerId: "cus_live_sandbox123",
+        StripeSubscriptionId: "sub_live_sandbox123"
+      } as Tenant
+    }));
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ upgradeTenantPlanAction Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
 
