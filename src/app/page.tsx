@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SplashShader from "@/components/SplashShader";
-import { Database, MessageSquare, Triangle, Shield, Loader2 } from "lucide-react";
+import { Database, MessageSquare, Triangle, Shield, Loader2, Sparkles } from "lucide-react";
 import { audio } from "@/lib/audio";
 
 const BOOT_LOGS = [
@@ -229,6 +229,38 @@ export default function WelcomePage() {
           </div>
         </div>
 
+      </div>
+
+      {/* Hackathon Judge Quickstart Guide */}
+      <div className="relative z-20 max-w-6xl mx-auto w-full mt-6 mb-2 border border-zinc-800 bg-[#050505]/90 p-5 backdrop-blur-md">
+        <div className="flex items-center gap-2 mb-3 border-b border-zinc-800 pb-2">
+          <Sparkles className="w-4.5 h-4.5 text-yellow-500" />
+          <h2 className="font-mono text-xs font-bold text-white tracking-widest uppercase">🔬 HACKATHON EVALUATOR QUICKSTART & GRADING GUIDE</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-[10px] md:text-xs font-mono text-zinc-400 leading-relaxed">
+          
+          <div className="flex flex-col gap-2 border-r border-zinc-900 pr-0 md:pr-4">
+            <span className="text-white font-bold tracking-wider uppercase border-b border-zinc-900 pb-1">1. Sandbox Fleet Demo</span>
+            <p>Click <strong className="text-white">LAUNCH SANDBOX DEMO</strong> to access a pre-populated fleet of 10+ simulated workstations running on a 3D WebGL network grid.</p>
+            <p>Use the <strong className="text-white">Threat Simulator</strong> card on the sidebar to trigger process violations (like rogue LLMs), watch the grid node turn orange, and click <strong className="text-white">Isolate Device</strong> to trigger an atomic database state lock.</p>
+          </div>
+
+          <div className="flex flex-col gap-2 border-r border-zinc-900 pr-0 md:pr-4">
+            <span className="text-white font-bold tracking-wider uppercase border-b border-zinc-900 pb-1">2. Run Local Client Daemon</span>
+            <p>To register your physical device and stream live telemetry, open your terminal and run:</p>
+            <code className="bg-zinc-950 p-2 border border-zinc-900 text-green-400 select-all block text-[9px] break-all leading-normal uppercase">
+              npm run agent OPERATOR-WORKSTATION
+            </code>
+            <p>It queries your motherboard BIOS UUID to prevent spoofing and streams metrics using cryptographic HMAC-SHA256 signatures.</p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-white font-bold tracking-wider uppercase border-b border-zinc-900 pb-1">3. Database & Billing Auditing</span>
+            <p>Verify single-table sharding and sparse indexing in your AWS Console, or review the comprehensive architecture charts locally at <a href="/privacy" className="text-white underline font-bold hover:text-[#00FF41]">Compliance Policy</a>.</p>
+            <p>To upgrade subscription limits, click the <strong className="text-white">Billing Settings</strong> button in the sidebar and enter any mock card details to dynamically update tenant limits.</p>
+          </div>
+
+        </div>
       </div>
 
       {/* Footer Info */}
