@@ -198,6 +198,6 @@ LifecycleZero is highly profitable due to its serverless, pay-per-use backend ar
 ## 🗺️ 8. Architectural Blueprints & Diagrams
 
 For visual blueprints, operational flowcharts, and React component trees, review:
-*   **[Technical Architecture & Activity Flowcharts](file:///c:/Users/Hamza Imran/.gemini/antigravity/scratch/hackathons/medium-long-30d/hack-the-zero-stack/docs/architecture/system_flowcharts.md)**: Visualizes SQS decoupling, edge checks, Ollama threat analysis, and ACID isolation transactions.
-*   **[Frontend Component Hierarchies & Trees](file:///c:/Users/Hamza Imran/.gemini/antigravity/scratch/hackathons/medium-long-30d/hack-the-zero-stack/docs/architecture/component_trees.md)**: Visualizes mounted React component structures, nested overlays, and SWR state scopes for each screen.
+*   **[Technical Architecture & Activity Flowcharts](docs/architecture/system_flowcharts.md)**: Visualizes SQS decoupling, edge checks, Ollama threat analysis, and ACID isolation transactions.
+*   **[Frontend Component Hierarchies & Trees](docs/architecture/component_trees.md)**: Visualizes mounted React component structures, nested overlays, and SWR state scopes for each screen.
 
