@@ -30,7 +30,8 @@ async function seed() {
       TenantSlug: "acme-corp",
       CreatedAt: timestamp,
       Status: "ACTIVE",
-      Plan: "FREE_TIER"
+      Plan: "FREE_TIER",
+      MaxAllowedEndpoints: 150
     },
 
     // 2. Employees

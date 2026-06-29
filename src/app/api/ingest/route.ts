@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAssetById, createHardwareAsset, getTenantOllamaConfig } from '@/lib/dao';
+import { getAssetById, createHardwareAsset, getTenantOllamaConfig, getTenantMetadata } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
 import { env } from '@/lib/env';
 import { evaluateTelemetryRisk } from '@/lib/ai';
 import { docClient } from '@/lib/dynamodb';
-import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import crypto from 'crypto';
 
 const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
@@ -93,9 +93,39 @@ export async function POST(request: Request) {
 
     const globalEnrollmentKey = env("AGENT_API_KEY", "demo_agent_key_99");
 
+    // Fetch tenant metadata to enforce limits
+    const tenantMeta = await getTenantMetadata(tenantId);
+    if (tenantMeta) {
+      if (tenantMeta.Status === "SUSPENDED") {
+        return NextResponse.json({
+          error: "TENANT_SUSPENDED",
+          message: "Organization subscription is suspended. Ingestion disabled."
+        }, { status: 403 });
+      }
+    }
+
     // 2. Fetch asset to check status (auto-enroll if not exists)
     let asset = await getAssetById(tenantId, assetId);
     if (!asset) {
+      if (tenantMeta) {
+        const assetsRes = await docClient.send(new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+          ExpressionAttributeValues: {
+            ":pk": `TENANT#${tenantId}`,
+            ":sk": "ASSET#"
+          }
+        }));
+        const activeCount = assetsRes.Count || 0;
+        const maxAllowed = tenantMeta.MaxAllowedEndpoints || 5;
+        if (activeCount >= maxAllowed) {
+          return NextResponse.json({
+            error: "INGESTION_QUOTA_EXCEEDED",
+            message: `Endpoint limit reached (${activeCount}/${maxAllowed}). Upgrade your plan to enroll more devices.`
+          }, { status: 402 });
+        }
+      }
+
       // New devices require the global enrollment key to onboard
       if (agentKey !== globalEnrollmentKey) {
         return NextResponse.json({

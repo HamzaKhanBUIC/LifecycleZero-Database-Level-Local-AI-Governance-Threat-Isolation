@@ -12,7 +12,8 @@ import {
   resolveProcurementRequest,
   createHardwareAsset,
   getTenantOllamaConfig,
-  updateTenantOllamaConfig
+  updateTenantOllamaConfig,
+  getTenantMetadata
 } from "@/lib/dao";
 import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@/lib/types";
 
@@ -741,6 +742,35 @@ export async function getTenantTelemetryAction(tenantId: string) {
   } catch (error: any) {
     console.error("❌ getTenantTelemetryAction Error:", error);
     return { success: false, error: error.message, telemetry: [] };
+  }
+}
+
+/**
+ * Server action to get Tenant plan and subscription metadata
+ */
+export async function getTenantMetadataAction() {
+  try {
+    const { tenantId } = await getTenantContext();
+    const metadata = await getTenantMetadata(tenantId || "org_demo_123");
+    
+    // Fallback if metadata not seeded
+    const fallbackMetadata = {
+      PK: `TENANT#${tenantId || "org_demo_123"}`,
+      SK: "METADATA",
+      TenantName: "Acme Corp Remote",
+      TenantSlug: "acme-corp",
+      Status: "ACTIVE" as const,
+      Plan: "FREE_TIER" as const,
+      MaxAllowedEndpoints: 150
+    };
+
+    return { 
+      success: true, 
+      metadata: metadata || fallbackMetadata 
+    };
+  } catch (error: any) {
+    console.error("❌ getTenantMetadataAction Error:", error);
+    return { success: false, error: error.message };
   }
 }
 

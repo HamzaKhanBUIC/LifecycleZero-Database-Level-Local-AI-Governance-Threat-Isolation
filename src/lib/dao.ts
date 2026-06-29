@@ -504,3 +504,14 @@ export async function updateTenantOllamaConfig(
     ExpressionAttributeValues: attributeValues
   }));
 }
+
+/**
+ * Fetch direct Tenant Metadata record
+ */
+export async function getTenantMetadata(tenantId: string): Promise<Tenant | undefined> {
+  const res = await docClient.send(new GetCommand({
+    TableName: TABLE_NAME,
+    Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" }
+  }));
+  return res.Item as Tenant | undefined;
+}

@@ -50,6 +50,7 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 4. Device isolation status changes and audit logs must be written atomically using DynamoDB `TransactWriteItems`.
 5. Threat details must be indexed in a Sparse GSI (GSI2) to eliminate telemetry reading scan costs.
 6. Telemetry records must configure a DynamoDB TTL of 30 days to automatically prune database size.
+7. Ingestion quotas and tenant subscription states must be validated at the Edge API layer before queueing telemetry.
 
 ---
 
@@ -66,6 +67,7 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | `clerk` | B2B Tenant Auth Context | Clerk NextJS | Completed |
 | `agent` | Workstation Telemetry Signer Client | Node.js Daemon | Completed |
 | `worker` | Telemetry Queue Poller & AI Evaluator | Node.js SQS | Completed |
+| `api/webhooks/stripe` | Stripe Subscription Webhook | Next.js Serverless | Completed |
 
 ---
 
@@ -79,6 +81,7 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | AWS SQS | Ingest payload buffering queue | `SQS_QUEUE_URL` | Connected |
 | Clerk | Multi-tenant auth & sign-in | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Integrated |
 | Ollama | Offline local AI inference | `OLLAMA_MODEL`, `OLLAMA_HOST` | Installed |
+| Stripe | Subscription billing management | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET` | Configured |
 
 ---
 
@@ -95,6 +98,7 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | 2026-06-28 | TransactWriteItems Isolation Locks | Guarantees atomic updates of device status and immutable SOC 2 audit logs. |
 | 2026-06-28 | DynamoDB Time to Live (TTL) | Automatically purges telemetry older than 30 days to reduce storage costs and meet compliance. |
 | 2026-06-29 | Offline Ollama Threat Assessment | Eliminates data leakage by evaluating workstation context entirely offline. |
+| 2026-06-29 | Stripe Subscription & Quotas | Implements automated B2B monetization and enforces endpoint limits at the Edge API layer. |
 
 ---
 

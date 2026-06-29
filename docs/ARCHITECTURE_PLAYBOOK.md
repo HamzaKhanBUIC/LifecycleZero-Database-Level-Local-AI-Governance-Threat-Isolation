@@ -92,6 +92,14 @@ The platform includes three advanced security and scaling mechanisms directly in
 *   **Telemetry Sharding**: Raw telemetry writes partition keys are sharded across 10 physical partitions: `TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>` using a random hashing function.
 *   **Throughput Scale**: This distributes the write load, raising write throughput limits to 10,000 WCUs/sec (capable of scaling to 50,000+ endpoints per tenant) while keeping dashboard global queries fast and responsive.
 
+### 4. Edge-Level Telemetry Quota Checks
+*   **Active Tenant Check**: Before telemetry queues inside SQS, the `/api/ingest` route validates the active tenant status. If the account status is `SUSPENDED`, ingestion is aborted immediately with `403 Forbidden`.
+*   **Quota Enforcement**: If a client registers a new device, the edge API queries the database to count the current enrolled device count. If it exceeds the tenant's `MaxAllowedEndpoints` threshold, the API blocks the write and returns `402 Payment Required`.
+
+### 5. Stripe Subscription Synchronization
+*   **Webhook Processing**: The serverless route at `/api/webhooks/stripe` processes payment events (`customer.subscription.created`, `customer.subscription.deleted`, and `customer.subscription.updated`).
+*   **Dynamic Plan Updates**: The webhook updates the Tenant metadata plan type (`FREE_TIER` / `ENTERPRISE`), active status, and endpoint limits (`25` / `150`) dynamically in the DynamoDB table.
+
 ---
 
 ## 🧪 6. Step-by-Step Developer Verification Guide

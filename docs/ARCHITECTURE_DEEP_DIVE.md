@@ -96,6 +96,10 @@ The backend focuses on high-speed ingestion, cryptographically securing incoming
 ### C. Streaming Audits (`/api/export/audit/csv`)
 *   To support corporate SOC 2 audits, administrators can export device isolation histories. The CSV exporter uses **HTTP Chunked Streaming**. Instead of compiling the entire CSV in memory, it queries DynamoDB and streams rows to the client chunk-by-chunk, keeping Vercel memory overhead at less than **10MB** even for millions of records.
 
+### D. Stripe Webhooks & Subscription Quotas
+*   **Edge-Level Quota Checks:** Before telemetry queues inside SQS, the `/api/ingest` route checks the active tenant metadata. If the account is marked `SUSPENDED`, ingestion is aborted immediately. If the device is new and active nodes meet or exceed the tenant's `MaxAllowedEndpoints` limit, the API rejects it with `402 Payment Required`, blocking enrollment.
+*   **Stripe Webhooks (`/api/webhooks/stripe`):** A serverless route listens for Stripe events (`customer.subscription.*`) to dynamically update quotas (`25` on Free tier, `150` on Enterprise) and toggle active subscription states in the DynamoDB metadata item.
+
 ---
 
 ## 🕵️ 4. Worker Daemon & Offline Threat AI
@@ -160,3 +164,7 @@ In standard DynamoDB, a single partition can only handle 1,000 writes per second
 ### D. Automated Compliance Retention (TTL)
 *   Telemetry data carries a high storage cost. We enabled **Time to Live (TTL)** on the table.
 *   Every telemetry row is saved with a `TTL` timestamp set to **30 days** in the future. AWS automatically purges these items in the background at no cost, fulfilling SOC 2 compliance data-pruning standards automatically.
+
+### E. Global Tables Replication & IAM Leading Keys (Production Scale)
+*   **Multi-Region DynamoDB Replication:** To support globally distributed client agents, the production table is replicated across `us-east-1`, `eu-west-1`, and `ap-southeast-1` using DynamoDB Global Tables, ensuring write latencies remain under 10ms worldwide.
+*   **Fine-Grained IAM Access Control:** Instead of administrative credentials, Next.js serverless functions use scoped IAM access tokens. We enforce partition isolation by applying `dynamodb:LeadingKeys` conditions, restricting API read/write operations strictly to `TENANT#${aws:PrincipalTag/TenantId}*` rows.

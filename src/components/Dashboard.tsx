@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction } from "@/lib/api";
-import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download } from "lucide-react";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction } from "@/lib/api";
+import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Tactical3DGrid from "./Tactical3DGrid";
@@ -58,11 +58,12 @@ const fetchDashboardData = async (tenantId: string) => {
   const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
   const isSandbox = allowedSandboxTenants.includes(tenantId);
 
-  const [fetchedAssets, fetchedAlerts, configRes, telemetryRes] = await Promise.all([
+  const [fetchedAssets, fetchedAlerts, configRes, telemetryRes, metadataRes] = await Promise.all([
     getAssets(tenantId),
     getCrossAssetAlerts(tenantId),
     getTenantOllamaConfigAction(),
-    isSandbox ? Promise.resolve({ success: true, telemetry: [] }) : getTenantTelemetryAction(tenantId)
+    isSandbox ? Promise.resolve({ success: true, telemetry: [] }) : getTenantTelemetryAction(tenantId),
+    getTenantMetadataAction()
   ]);
 
   const sortedAlerts = fetchedAlerts.sort((a, b) => new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime());
@@ -78,6 +79,15 @@ const fetchDashboardData = async (tenantId: string) => {
       ollamaEndpoint: 'http://localhost:11434',
       ollamaModel: 'llama3',
       sensitiveFilePatterns: DEFAULT_SENSITIVE_PATTERNS
+    },
+    tenantMeta: metadataRes?.success && metadataRes.metadata ? metadataRes.metadata : {
+      PK: `TENANT#${tenantId}`,
+      SK: "METADATA",
+      TenantName: "Acme Corp (Demo)",
+      TenantSlug: "acme-corp",
+      Status: "ACTIVE" as const,
+      Plan: "FREE_TIER" as const,
+      MaxAllowedEndpoints: 150
     }
   };
 };
@@ -179,6 +189,15 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         ollamaEndpoint: 'http://localhost:11434',
         ollamaModel: 'llama3',
         sensitiveFilePatterns: DEFAULT_SENSITIVE_PATTERNS
+      },
+      tenantMeta: {
+        PK: `TENANT#${activeTenantId}`,
+        SK: "METADATA",
+        TenantName: "Acme Corp (Demo)",
+        TenantSlug: "acme-corp",
+        Status: "ACTIVE" as const,
+        Plan: "FREE_TIER" as const,
+        MaxAllowedEndpoints: 150
       }
     }
   });
@@ -1429,6 +1448,57 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                 >
                   {savingConfig ? 'APPLYING CONFIG...' : 'APPLY LOCAL MODEL CONFIG'}
                 </button>
+              </div>
+            </div>
+
+            {/* B2B subscription and billing usage quota card */}
+            <div className="bg-[#09090b] border border-zinc-800 flex flex-col relative overflow-hidden group">
+              {/* Sleek violet/indigo background gradient glow */}
+              <div className="absolute -right-16 -top-16 w-36 h-36 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none group-hover:bg-indigo-500/20 transition-colors duration-500" />
+              
+              <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
+                <h2 className="text-xs font-mono font-semibold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-indigo-500" />
+                  B2B Billing & Quota
+                </h2>
+                <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 bg-indigo-950/40 border border-indigo-900 text-indigo-400 rounded-sm">
+                  {data?.tenantMeta?.Plan === "ENTERPRISE" ? "ENTERPRISE PLAN" : "FREE PLAN"}
+                </span>
+              </div>
+              
+              <div className="p-3 flex flex-col gap-3 font-mono text-[9px]">
+                <div className="flex justify-between items-center text-zinc-400">
+                  <span className="uppercase text-[8px] tracking-wider text-zinc-500 font-bold">Active Fleet Size:</span>
+                  <span className="text-zinc-200 font-bold">{assets.length} / {data?.tenantMeta?.MaxAllowedEndpoints || 5} Devices</span>
+                </div>
+                
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-zinc-950 border border-zinc-900 h-2.5 rounded-none overflow-hidden relative p-[1px]">
+                  <div 
+                    style={{ width: `${Math.min(100, (assets.length / (data?.tenantMeta?.MaxAllowedEndpoints || 5)) * 100)}%` }}
+                    className={`h-full transition-all duration-1000 ${
+                      assets.length / (data?.tenantMeta?.MaxAllowedEndpoints || 5) >= 0.9 
+                        ? 'bg-red-500' 
+                        : assets.length / (data?.tenantMeta?.MaxAllowedEndpoints || 5) >= 0.7 
+                          ? 'bg-amber-500' 
+                          : 'bg-indigo-500'
+                    }`}
+                  />
+                </div>
+                
+                <div className="flex justify-between items-center border-t border-zinc-900 pt-2 text-[8px] text-zinc-500">
+                  <span>RATE: $8/workstation/mo</span>
+                  <span>STATUS: {data?.tenantMeta?.Status === "ACTIVE" ? "ACTIVE_OK" : "SUSPENDED"}</span>
+                </div>
+
+                <a
+                  href="https://stripe.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-zinc-950 border border-zinc-850 hover:border-indigo-900 hover:text-indigo-400 text-center font-bold py-1.5 text-zinc-450 hover:bg-indigo-950/20 transition-all cursor-pointer rounded-sm"
+                >
+                  MANAGE B2B SUBSCRIPTION
+                </a>
               </div>
             </div>
 

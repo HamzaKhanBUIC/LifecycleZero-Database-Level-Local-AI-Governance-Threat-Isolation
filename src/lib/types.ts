@@ -10,6 +10,9 @@ export interface Tenant {
   OllamaEndpoint?: string;
   OllamaModel?: string;
   SensitiveFilePatterns?: string[];
+  MaxAllowedEndpoints?: number;
+  StripeCustomerId?: string;
+  StripeSubscriptionId?: string;
 }
 
 export interface Employee {
