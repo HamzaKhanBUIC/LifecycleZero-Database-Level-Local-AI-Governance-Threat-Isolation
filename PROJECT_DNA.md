@@ -68,6 +68,8 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | `agent` | Workstation Telemetry Signer Client | Node.js Daemon | Completed |
 | `worker` | Telemetry Queue Poller & AI Evaluator | Node.js SQS | Completed |
 | `api/webhooks/stripe` | Stripe Subscription Webhook | Next.js Serverless | Completed |
+| `lib/api.ts` | Consolidated API Class Wrapper (`LifecycleZeroAPI`) | TypeScript Client/Server | Completed |
+| `docs/architecture` | system_flowcharts.md / component_trees.md | Mermaid Documentation | Completed |
 
 ---
 
@@ -99,6 +101,8 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | 2026-06-28 | DynamoDB Time to Live (TTL) | Automatically purges telemetry older than 30 days to reduce storage costs and meet compliance. |
 | 2026-06-29 | Offline Ollama Threat Assessment | Eliminates data leakage by evaluating workstation context entirely offline. |
 | 2026-06-29 | Stripe Subscription & Quotas | Implements automated B2B monetization and enforces endpoint limits at the Edge API layer. |
+| 2026-06-29 | Unified API Class (`LifecycleZeroAPI`) | Consolidates all Server Actions and REST pings under a single client/server wrapper class. |
+| 2026-06-29 | Dynamic Clerk Auth Fallbacks | Prevents blank loading states on live deployments when Clerk keys are omitted by showing interactive mock portals. |
 
 ---
 
