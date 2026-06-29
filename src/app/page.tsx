@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SplashShader from "@/components/SplashShader";
-import { Database, MessageSquare, Triangle, Shield } from "lucide-react";
+import { Database, MessageSquare, Triangle, Shield, Loader2 } from "lucide-react";
 import { audio } from "@/lib/audio";
 
 const BOOT_LOGS = [
@@ -28,6 +28,10 @@ export default function WelcomePage() {
   const fullText = "Zero Trust. Zero Delays. Zero Rogue Agents.";
   const [typedText, setTypedText] = useState("");
   const [showStats, setShowStats] = useState(false);
+  
+  // Loading states for navigation pings
+  const [loadingPortal, setLoadingPortal] = useState(false);
+  const [loadingSandbox, setLoadingSandbox] = useState(false);
   
   // Audio state
   const [isMuted, setIsMuted] = useState(true);
@@ -76,16 +80,16 @@ export default function WelcomePage() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [visibleLogs]);
 
-
-
   const handlePortalButton = () => {
     if (!isMuted) audio.playClick();
+    setLoadingPortal(true);
     document.cookie = "lifecycle_tenant_id=org_real_impl; path=/;";
     router.push("/security");
   };
 
   const handleSandboxButton = () => {
     if (!isMuted) audio.playClick();
+    setLoadingSandbox(true);
     document.cookie = "lifecycle_tenant_id=org_demo_123; path=/;";
     router.push("/security?demo=true");
   };
@@ -167,17 +171,33 @@ export default function WelcomePage() {
           <div className={`flex flex-col sm:flex-row gap-4 w-full max-w-lg transition-all duration-1000 delay-500 ${showStats ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
             <button 
               onClick={handlePortalButton}
+              disabled={loadingPortal || loadingSandbox}
               onMouseEnter={() => !isMuted && audio.playClick()}
-              className="flex-1 px-5 py-3 border border-zinc-700 bg-transparent text-zinc-300 hover:text-white hover:border-white font-mono text-xs font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer text-center"
+              className="flex-1 px-5 py-3 border border-zinc-700 bg-transparent text-zinc-300 hover:text-white hover:border-white font-mono text-xs font-bold uppercase tracking-widest transition-all duration-300 cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              &gt; ENTERPRISE PORTAL
+              {loadingPortal ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                  <span>ESTABLISHING HANDSHAKE...</span>
+                </>
+              ) : (
+                <span>&gt; ENTERPRISE PORTAL</span>
+              )}
             </button>
             <button 
               onClick={handleSandboxButton}
+              disabled={loadingPortal || loadingSandbox}
               onMouseEnter={() => !isMuted && audio.playClick()}
-              className="flex-1 px-5 py-3 bg-white text-black font-mono text-xs font-bold uppercase tracking-widest border border-white hover:bg-zinc-200 transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer text-center animate-pulse"
+              className="flex-1 px-5 py-3 bg-white text-black font-mono text-xs font-bold uppercase tracking-widest border border-white hover:bg-zinc-200 transition-all duration-300 shadow-[0_0_15px_rgba(255,255,255,0.15)] cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              &gt; LAUNCH SANDBOX DEMO
+              {loadingSandbox ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-black" />
+                  <span>INITIALIZING SANDBOX...</span>
+                </>
+              ) : (
+                <span>&gt; LAUNCH SANDBOX DEMO</span>
+              )}
             </button>
           </div>
         </div>

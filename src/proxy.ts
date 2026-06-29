@@ -1,94 +1,80 @@
-/**
- * Next.js Edge Middleware
- *
- * Responsibilities:
- *   1. Per-IP sliding-window rate limiting on /api/ingest
- *      — 20 requests per 10-second window per IP
- *      — Returns HTTP 429 with Retry-After header when exceeded
- *      — Protects against telemetry flood / DDoS on the ingestion endpoint
- *   2. Optional Clerk authentication enforcement on /dashboard/* routes
- */
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// ---------------------------------------------------------------------------
-// Rate Limiter — Sliding Window (in-memory, per Edge isolate)
-// ---------------------------------------------------------------------------
-const RATE_LIMIT_WINDOW_MS = 10_000; // 10 seconds
-const RATE_LIMIT_MAX_REQUESTS = 20;  // 20 requests per window per IP
+// Rate limiting configurations
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute
 
-interface RateEntry {
-  timestamps: number[];
-}
-
-const ipStore = new Map<string, RateEntry>();
+// Simple in-memory rate limit store for local fallback
+const localStore = new Map<string, { timestamps: number[] }>();
 
 async function isRateLimited(ip: string): Promise<{ limited: boolean; retryAfterMs: number }> {
+  const now = Date.now();
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-  const now = Date.now();
-  const windowBucket = Math.floor(now / 10000); // 10-second fixed window
-  const key = `ratelimit:${ip}:${windowBucket}`;
-
+  // Use Upstash Redis REST API if configured
   if (redisUrl && redisToken) {
     try {
-      // Zero-dependency REST pipeline call to Upstash Redis (Edge runtime compatible)
-      const res = await fetch(`${redisUrl.replace(/\/$/, "")}/pipeline`, {
+      const cleanedUrl = redisUrl.replace(/\/$/, "");
+      const key = `rate_limit:ingest:${ip}`;
+      
+      const res = await fetch(`${cleanedUrl}/pipeline`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${redisToken}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify([
           ["INCR", key],
-          ["EXPIRE", key, 10]
+          ["PTTL", key],
         ]),
-        // Prevent Vercel middleware from caching the rate-limit check response
-        cache: "no-store"
       });
 
       if (res.ok) {
-        const pipelineRes = await res.json();
-        const count = Number(pipelineRes[0]?.result || 1);
+        const [[, count], [, pttl]] = await res.json();
+        
+        // On first increment, set a 60-second expiration time
+        if (count === 1) {
+          await fetch(`${cleanedUrl}/EXPIRE/${key}/60`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${redisToken}` },
+          });
+        }
+
         if (count > RATE_LIMIT_MAX_REQUESTS) {
-          const retryAfterMs = (windowBucket + 1) * 10000 - now;
-          return { limited: true, retryAfterMs: Math.max(0, retryAfterMs) };
+          return { limited: true, retryAfterMs: pttl > 0 ? pttl : 1000 };
         }
         return { limited: false, retryAfterMs: 0 };
-      } else {
-        console.warn("[MIDDLEWARE WARNING] Upstash Redis REST pipeline failed. Status:", res.status);
       }
     } catch (err) {
       console.error("[MIDDLEWARE ERROR] Upstash Redis rate limit exception. Falling back to local store:", err);
     }
   }
 
-  // Local sliding window fallback (isolated per edge instance)
-  const windowStart = now - RATE_LIMIT_WINDOW_MS;
-
-  if (!ipStore.has(ip)) {
-    ipStore.set(ip, { timestamps: [] });
+  // Local fallback (in-memory)
+  if (!localStore.has(ip)) {
+    localStore.set(ip, { timestamps: [] });
   }
 
-  const entry = ipStore.get(ip)!;
-  entry.timestamps = entry.timestamps.filter((t) => t > windowStart);
+  const entry = localStore.get(ip)!;
+  entry.timestamps = entry.timestamps.filter((ts) => now - ts < RATE_LIMIT_WINDOW_MS);
 
   if (entry.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
-    const oldestTimestamp = entry.timestamps[0];
-    const retryAfterMs = oldestTimestamp + RATE_LIMIT_WINDOW_MS - now;
-    return { limited: true, retryAfterMs: Math.max(0, retryAfterMs) };
+    const oldest = entry.timestamps[0];
+    const retryAfterMs = RATE_LIMIT_WINDOW_MS - (now - oldest);
+    return { limited: true, retryAfterMs };
   }
 
   entry.timestamps.push(now);
   return { limited: false, retryAfterMs: 0 };
 }
 
-// ---------------------------------------------------------------------------
-// Middleware entry point
-// ---------------------------------------------------------------------------
-const SKIP_CLERK = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
+// Clerk route matcher
+const isProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/security(.*)"]);
 
-async function middleware(req: NextRequest) {
+export default clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
   // --- Rate limiting: /api/ingest only ---
@@ -103,7 +89,7 @@ async function middleware(req: NextRequest) {
       return NextResponse.json(
         {
           error: "RATE_LIMITED",
-          message: `Too many telemetry events. Maximum ${RATE_LIMIT_MAX_REQUESTS} requests per ${RATE_LIMIT_WINDOW_MS / 1000}s window. Retry after ${Math.ceil(retryAfterMs / 1000)}s.`,
+          message: `Too many telemetry events. Maximum ${RATE_LIMIT_MAX_REQUESTS} requests per ${RATE_LIMIT_WINDOW_MS / 1000}s. Retry after ${Math.ceil(retryAfterMs / 1000)}s.`,
           retryAfterSeconds: Math.ceil(retryAfterMs / 1000),
         },
         {
@@ -118,29 +104,25 @@ async function middleware(req: NextRequest) {
     }
   }
 
-  // --- Clerk authentication: /dashboard/* & /security ---
-  const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
-  const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
-  const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
-  const isSandbox = isDemoQuery || allowedSandboxTenants.includes(tenantCookie || "");
+  // --- Clerk protection: /dashboard/* & /security ---
+  if (isProtectedRoute(req)) {
+    const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
+    const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
+    const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
+    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
+    const isSandbox = isDemoQuery || allowedSandboxTenants.includes(tenantCookie || "");
 
-  const isPublicApi = pathname.startsWith("/api/ingest") || pathname.startsWith("/api/webhooks");
-  const shouldSkipClerk = SKIP_CLERK || isSandbox || isPublicApi;
-
-  if (!shouldSkipClerk) {
-    const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-    if (pubKey && pubKey.startsWith("pk_")) {
-      const { clerkMiddleware, createRouteMatcher } = await import("@clerk/nextjs/server");
-      const isDashboardRoute = createRouteMatcher(["/dashboard(.*)", "/security(.*)"]);
-      return clerkMiddleware(async (auth, request) => {
-        if (isDashboardRoute(request)) {
-          await auth.protect();
-        }
-      })(req, {} as any) as unknown as NextResponse;
+    if (!skipClerk && !isSandbox) {
+      const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+      if (pubKey && pubKey.startsWith("pk_")) {
+        await auth.protect();
+      }
     }
   }
 
   // Sniff demo query parameter and set cookie to org_demo_123 automatically so SSR has immediate context
+  const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
+  const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
   if (isDemoQuery && tenantCookie !== "org_demo_123") {
     const response = NextResponse.next();
     response.cookies.set("lifecycle_tenant_id", "org_demo_123", { path: "/" });
@@ -148,9 +130,7 @@ async function middleware(req: NextRequest) {
   }
 
   return NextResponse.next();
-}
-
-export default middleware;
+});
 
 export const config = {
   matcher: [
