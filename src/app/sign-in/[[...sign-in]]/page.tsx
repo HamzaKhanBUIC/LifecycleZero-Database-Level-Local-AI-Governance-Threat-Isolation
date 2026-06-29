@@ -9,7 +9,7 @@ import { SignIn } from "@clerk/nextjs";
 export default function SignInPage() {
   const router = useRouter();
   const [email, setEmail] = useState("judge_tester@lifecyclezero.com");
-  const [password, setPassword] = useState("password123");
+  const [password, setPassword] = useState("H0Hackathon2026!");
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
