@@ -36,7 +36,7 @@ async function processTelemetryInline(payload: any) {
     GSI1SK: `DATE#${timestamp}`,
   };
 
-  // Evaluate risk level via Bedrock / Gemini fallback
+  // Evaluate risk level via local threat analysis engine (Ollama/heuristics)
   const aiResult = await evaluateTelemetryRisk(baseTelemetry as any);
 
   // 90 days TTL

@@ -66,7 +66,7 @@ async function processTelemetryItem(payload: any) {
     GSI1SK: `DATE#${timestamp}`,
   };
 
-  // Evaluate risk level via Bedrock
+  // Evaluate risk level via local threat analysis engine (Ollama/heuristics)
   console.log(`[WORKER] Evaluating threat behavior for ${assetId}...`);
   const aiResult = await evaluateTelemetryRisk(baseTelemetry as any);
 
