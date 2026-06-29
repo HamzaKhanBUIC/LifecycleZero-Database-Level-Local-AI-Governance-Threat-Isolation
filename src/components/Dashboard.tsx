@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
-import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction, upgradeTenantPlanAction } from "@/lib/api";
+import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction, upgradeTenantPlanAction, LifecycleZeroAPI } from "@/lib/api";
 import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -258,17 +258,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     // Validate connection if trying to run PURE_OLLAMA or if modifying model configuration explicitly
     if (targetMode === 'PURE_OLLAMA' || !newMode) {
       try {
-        const cleanedHost = customEndpoint.replace(/\/$/, "");
-        const tagsRes = await fetch(`${cleanedHost}/api/tags`, { 
-          method: 'GET',
-          signal: AbortSignal.timeout(3000)
-        });
-        
-        if (!tagsRes.ok) {
-          throw new Error(`Endpoint returned status ${tagsRes.status}`);
-        }
-
-        const tagsData = await tagsRes.json();
+        const tagsData = await LifecycleZeroAPI.testOllamaConnection(customEndpoint);
         const modelsList = tagsData.models || [];
         
         if (customModel && customModel !== '') {
@@ -480,16 +470,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
           ]);
         }
 
-        const res = await fetch("/api/ingest", {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "X-Agent-Key": "demo_agent_key_99"
-          },
-          body: JSON.stringify(payload)
-        });
-        
-        const resData = await res.json();
+        const result = await LifecycleZeroAPI.ingestTelemetry(payload);
+        const res = { ok: result.ok, status: result.status };
+        const resData = result.data;
         if (res.ok) {
           if (resData.status === "EVALUATED") {
             setSimulationLog(prev => [
@@ -682,12 +665,9 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         setSimulationLog([]);
         setTimeout(async () => {
           try {
-            const res = await fetch("/api/ingest", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "X-Agent-Key": "demo_agent_key_99" },
-              body: JSON.stringify(cliPayload)
-            });
-            const resData = await res.json();
+            const result = await LifecycleZeroAPI.ingestTelemetry(cliPayload);
+            const res = { ok: result.ok, status: result.status };
+            const resData = result.data;
             setSimulationLog(res.ok
               ? [`[RESPONSE ${res.status}] SUCCESS: ${resData.message || "Queued."}`, `[QUEUE] Worker processing in 2-4 seconds.`]
               : [`[RESPONSE ${res.status}] FAILED: ${resData.error || "Unknown error"}`]);

@@ -56,4 +56,39 @@ export class LifecycleZeroAPI {
   static getTenantTelemetryAction = getTenantTelemetryAction;
   static getTenantMetadataAction = getTenantMetadataAction;
   static upgradeTenantPlanAction = upgradeTenantPlanAction;
+
+  /**
+   * Performs client-side REST call to check local on-premises Ollama connectivity
+   */
+  static async testOllamaConnection(endpoint: string): Promise<any> {
+    const cleanedHost = endpoint.replace(/\/$/, "");
+    const tagsRes = await fetch(`${cleanedHost}/api/tags`, { 
+      method: 'GET',
+      signal: AbortSignal.timeout(3000)
+    });
+    if (!tagsRes.ok) {
+      throw new Error(`Endpoint returned status ${tagsRes.status}`);
+    }
+    return tagsRes.json();
+  }
+
+  /**
+   * Performs client-side REST call to stream threat telemetry injection to Edge
+   */
+  static async ingestTelemetry(payload: any): Promise<{ ok: boolean; status: number; data: any }> {
+    const res = await fetch("/api/ingest", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json", 
+        "X-Agent-Key": "demo_agent_key_99" 
+      },
+      body: JSON.stringify(payload)
+    });
+    const resData = await res.json();
+    return {
+      ok: res.ok,
+      status: res.status,
+      data: resData
+    };
+  }
 }
