@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import useSWR, { mutate } from "swr";
 import { getAssets, getCrossAssetAlerts, isolateAsset, bulkIsolateAssets, restoreAsset, simulateSilentHost, seedActiveTenantAction, getTenantOllamaConfigAction, updateTenantOllamaConfigAction, getTenantTelemetryAction, getTenantMetadataAction, upgradeTenantPlanAction, LifecycleZeroAPI } from "@/lib/api";
-import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard, Loader2 } from "lucide-react";
+import { Shield, Server, Activity, AlertTriangle, ShieldAlert, Cpu, TerminalSquare, Bot, Download, CreditCard, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Tactical3DGrid from "./Tactical3DGrid";
@@ -378,6 +378,10 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
   const [selectedScenario, setSelectedScenario] = useState<keyof typeof SCENARIOS>("scenario1");
   const [simulating, setSimulating] = useState(false);
+  
+  // Onboarding Slides Guide
+  const [showDemoGuide, setShowDemoGuide] = useState(isForcedDemo);
+  const [guideStep, setGuideStep] = useState(1);
   const [simulationCount, setSimulationCount] = useState(0);
   const [simulationLog, setSimulationLog] = useState<string[]>([
     "System ready. Select a scenario to inject threat telemetry."
@@ -740,7 +744,183 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
   return (
     <div className="min-h-screen bg-[#09090b] text-gray-300 font-sans selection:bg-blue-900">
-      
+
+      {/* 🔬 HACKATHON EVALUATOR STEP-BY-STEP GRADING GUIDE MODAL */}
+      {showDemoGuide && (
+        <div className="fixed inset-0 bg-black/95 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm select-none">
+          <div className="border border-zinc-800 bg-[#070708] max-w-2xl w-full p-6 md:p-8 flex flex-col justify-between min-h-[500px] shadow-[0_0_80px_rgba(99,102,241,0.05)] relative font-mono">
+            
+            {/* Top Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-6">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-yellow-500" />
+                <span className="text-[10px] md:text-xs font-bold text-white tracking-widest uppercase">🔬 HACKATHON EVALUATION SANDBOX ONBOARDING</span>
+              </div>
+              <div className="text-[10px] text-zinc-500 tracking-wider">
+                SLIDE {guideStep} OF 5
+              </div>
+            </div>
+
+            {/* Slide Contents */}
+            <div className="flex-1 flex flex-col gap-4 text-xs md:text-sm text-zinc-400 leading-relaxed">
+              {guideStep === 1 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-white font-bold text-base uppercase tracking-tight">
+                    <Server className="w-5 h-5 text-blue-500" />
+                    <span>1. Prepopulated planned Workstation nodes</span>
+                  </div>
+                  <p>
+                    Welcome to the central Security Operations Center (SOC) of the organization.
+                  </p>
+                  <p>
+                    The 3D WebGL network grid represents active B2B workspace hosts. In sandbox mode, the grid is prepopulated with active employee devices (such as <strong className="text-white">AST-M3PRO-001</strong> and <strong className="text-white">AST-M3AIR-003</strong>).
+                  </p>
+                  <p>
+                    Each node streams real-time CPU, RAM, and network throughput data. The columns draw dynamic, lightweight <strong className="text-white">HTML5 Canvas sparklines</strong> reflecting live metric fluctuations with zero browser DOM overhead.
+                  </p>
+                </div>
+              )}
+
+              {guideStep === 2 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-white font-bold text-base uppercase tracking-tight">
+                    <Activity className="w-5 h-5 text-green-500" />
+                    <span>2. Fleet Dashboard & Hover Diagnostics</span>
+                  </div>
+                  <p>
+                    LifecycleZero gives security officers absolute visual context.
+                  </p>
+                  <p>
+                    You can search, filter, and inspect hardware inventory. Hovering your mouse over any active workstation node immediately locks on to that device, displaying:
+                  </p>
+                  <ul className="list-disc list-inside pl-2 space-y-1.5 text-zinc-350">
+                    <li>Device specs (macOS, Windows, or Linux kernels)</li>
+                    <li>Timing-safe cryptographic keys & rotated keys status</li>
+                    <li>Hardware BIOS UUID signature check</li>
+                    <li>Current active processes (e.g. Chrome, Teams, Slack)</li>
+                  </ul>
+                </div>
+              )}
+
+              {guideStep === 3 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-white font-bold text-base uppercase tracking-tight">
+                    <ShieldAlert className="w-5 h-5 text-orange-500" />
+                    <span>3. Threat Simulation & Containment</span>
+                  </div>
+                  <p>
+                    Test the local threat analysis engine without spinning up physical hardware:
+                  </p>
+                  <p>
+                    1. Scroll to the <strong className="text-white">Security Threat Simulator</strong> card in the right sidebar. Select a process violation (e.g., <strong className="text-white">llama.cpp Accessing auth_tokens.json</strong>) and click <strong className="text-white">Trigger Threat</strong>.
+                  </p>
+                  <p>
+                    2. The grid node instantly flashes <strong className="text-yellow-500">orange</strong> and raises a security alert inside the threat ledger.
+                  </p>
+                  <p>
+                    3. Click the warned node, and click the red <strong className="text-red-500">Isolate Device</strong> button. This fires an atomic transaction, writes an immutable compliance audit trail, changes the node status to isolated (turning it <strong className="text-red-500">red</strong>), and plays an acoustic alert clank.
+                  </p>
+                </div>
+              )}
+
+              {guideStep === 4 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-white font-bold text-base uppercase tracking-tight">
+                    <Bot className="w-5 h-5 text-purple-500" />
+                    <span>4. Run Local Client Daemon CLI</span>
+                  </div>
+                  <p>
+                    Verify physical workstation telemetry and cryptographic attestation:
+                  </p>
+                  <p>
+                    1. Open your terminal window and run:
+                  </p>
+                  <code className="bg-zinc-950 p-2 border border-zinc-900 text-green-400 select-all block text-[10px] break-all leading-normal uppercase">
+                    npm run agent OPERATOR-WORKSTATION-01
+                  </code>
+                  <p>
+                    2. The daemon registers your local motherboard BIOS UUID, performs key rotation, and streams pings using timing-safe <strong className="text-white">HMAC-SHA256 signatures</strong>.
+                  </p>
+                  <p>
+                    3. If you isolate this node, the Edge API instantly blocks all egress telemetry, returning <strong className="text-red-500">403 Forbidden (ISOLATED)</strong>.
+                  </p>
+                </div>
+              )}
+
+              {guideStep === 5 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 text-white font-bold text-base uppercase tracking-tight">
+                    <CreditCard className="w-5 h-5 text-yellow-500" />
+                    <span>5. Database Auditing & Stripe Billing</span>
+                  </div>
+                  <p>
+                    Audit multi-tenant partition scale and SaaS monetization checks:
+                  </p>
+                  <p>
+                    - <strong className="text-white">Single-Table DB:</strong> Consolidates metadata, employees, assets, and audit trails under `LifecycleZero_Assets` partitioned by tenant ID (`PK = TENANT#org_demo_123`).
+                  </p>
+                  <p>
+                    - <strong className="text-white">Sparse Index:</strong> Telemetry warnings are indexed under `GSI2`, allowing O(1) alert dashboard query searches without table scans.
+                  </p>
+                  <p>
+                    - <strong className="text-white">Stripe Mock:</strong> Click the Billing sidebar card. Upgrading your plan will trigger an SWR-monitored checkout and update your endpoint limit from 5 to 150.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Navigation Controls */}
+            <div className="flex justify-between items-center border-t border-zinc-800 pt-5 mt-6">
+              <button
+                onClick={() => {
+                  if (!isMuted) audio.playClick();
+                  setShowDemoGuide(false);
+                }}
+                className="text-[10px] text-zinc-500 hover:text-white uppercase transition-all tracking-wider cursor-pointer"
+              >
+                Skip Walkthrough
+              </button>
+              <div className="flex items-center gap-3">
+                {guideStep > 1 && (
+                  <button
+                    onClick={() => {
+                      if (!isMuted) audio.playClick();
+                      setGuideStep(prev => prev - 1);
+                    }}
+                    className="px-4 py-2 border border-zinc-800 bg-transparent text-zinc-400 hover:text-white uppercase text-[10px] tracking-wider cursor-pointer font-mono"
+                  >
+                    Back
+                  </button>
+                )}
+                {guideStep < 5 ? (
+                  <button
+                    onClick={() => {
+                      if (!isMuted) audio.playClick();
+                      setGuideStep(prev => prev + 1);
+                    }}
+                    className="px-4 py-2 bg-white text-black font-bold uppercase text-[10px] tracking-wider cursor-pointer font-mono hover:bg-zinc-200"
+                  >
+                    Next Step &gt;
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (!isMuted) audio.playClick();
+                      setShowDemoGuide(false);
+                    }}
+                    className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-bold uppercase text-[10px] tracking-wider cursor-pointer font-mono shadow-[0_0_15px_rgba(34,197,94,0.2)] flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Get Started</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation Bar */}
       <nav className="border-b border-zinc-800 bg-[#09090b] sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-4 h-14 flex items-center justify-between">
