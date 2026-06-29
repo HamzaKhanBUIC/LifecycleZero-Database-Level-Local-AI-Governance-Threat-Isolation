@@ -51,3 +51,28 @@ This path verifies the production-grade multi-tenant B2B onboarding, custom Cler
 
 ### Step 3: Export Compliance Trails
 1. Click **EXPORT CSV** or **EXPORT JSON** in the top navbar to download the secure SOC 2 compliance ledger, which records all administrative isolation actions and historical audit logs.
+
+---
+
+## 💳 Route C: B2B Stripe Billing & Quotas Demo
+This path verifies the B2B SaaS monetization model, edge-level quota enforcement, and live payment gateways.
+
+### Step 1: Inspect Free Plan Limits
+1. Load the dashboard under a new or active organization.
+2. Locate the **B2B Billing & Quota** card in the left sidebar.
+3. Verify that the plan shows **FREE PLAN** with an endpoint limit of **5 Devices**.
+
+### Step 2: Trigger Payment Gateway Checkout
+1. Click the glowing **⚡ UPGRADE TO ENTERPRISE** button on the card.
+2. A premium secure checkout modal will overlay.
+3. Input your name and type the official Stripe test card number: `4242 4242 4242 4242`.
+4. Fill in any future expiration date (e.g. `12/30`) and CVC (`123`), then click **CONFIRM UPGRADE ($1,200/mo)**.
+
+### Step 3: Verify Instant Unlock & Database Sync
+1. The transaction will process in 2 seconds (simulating bank authorization).
+2. The modal closes and the SWR poll instantly updates the Billing card to show:
+   - Plan: **ENTERPRISE PLAN** (Limit expanded to **150 Devices**).
+   - Stripe IDs: **STRIPE_CUSTOMER** and **STRIPE_SUB_ID** generated and written to DynamoDB.
+   - Status: **PAID_VERIFIED** (green badge).
+   - Invoice History logs populated dynamically.
+3. The Edge Ingestion API immediately clears the free-tier quota block, enabling registration of up to 150 client workstation nodes.

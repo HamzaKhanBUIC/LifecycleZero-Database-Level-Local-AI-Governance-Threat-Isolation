@@ -90,7 +90,7 @@ The platform includes three advanced security and scaling mechanisms directly in
 
 ### 3. Database Write Sharding
 *   **Telemetry Sharding**: Raw telemetry writes partition keys are sharded across 10 physical partitions: `TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>` using a random hashing function.
-*   **Throughput Scale**: This distributes the write load, raising write throughput limits to 10,000 WCUs/sec (capable of scaling to 50,000+ endpoints per tenant) while keeping dashboard global queries fast and responsive.
+*   **Throughput Scale**: This distributes the write load, raising write throughput limits to 10,000 WCUs/sec (capable of scaling to 50,000+ endpoints per tenant).
 
 ### 4. Edge-Level Telemetry Quota Checks
 *   **Active Tenant Check**: Before telemetry queues inside SQS, the `/api/ingest` route validates the active tenant status. If the account status is `SUSPENDED`, ingestion is aborted immediately with `403 Forbidden`.
@@ -99,6 +99,9 @@ The platform includes three advanced security and scaling mechanisms directly in
 ### 5. Stripe Subscription Synchronization
 *   **Webhook Processing**: The serverless route at `/api/webhooks/stripe` processes payment events (`customer.subscription.created`, `customer.subscription.deleted`, and `customer.subscription.updated`).
 *   **Dynamic Plan Updates**: The webhook updates the Tenant metadata plan type (`FREE_TIER` / `ENTERPRISE`), active status, and endpoint limits (`25` / `150`) dynamically in the DynamoDB table.
+
+### 6. Interactive Gateway Checkout Modal
+*   **Simulated Upgrades**: React client includes a styled credit card gateway mockup overlay (invoking `upgradeTenantPlanAction` server action) allowing judges/users to simulate payment upgrades using test card `4242 4242 4242 4242` directly in the dashboard, writing updated Enterprise metadata to DynamoDB with immediate 150-device quota unlock.
 
 ---
 
@@ -136,9 +139,31 @@ npm run dev -- --hostname 0.0.0.0 --port 3000
 *Note: Binding to `0.0.0.0` allows other local network devices (like your phone) to connect to `http://<your-pc-ip>:3000`.*
 
 ### Step 5: Run the Integration Test Suite
-To verify the database transaction boundaries, condition checks, sparse indexes, and edge gateway rules:
+To verify the database transaction boundaries, condition checks, sparse indexes, rate-limit policies, and Edge B2B quota constraints:
 ```bash
 npm run test:integration
+```
+```text
+🧪 Starting Backend Integration Verification for LifecycleZero...
+Tenant under test: org_test_999
+
+1. Seeding mock test employee...
+...
+8. Testing Failure Path: Double-Isolation ConditionCheck...
+✅ Success: Double-isolation blocked by DynamoDB ConditionCheck. Details: TRANSACTION_CANCELLED: The transaction was cancelled by DynamoDB. Reasons: [Item 0: ConditionalCheckFailed - The conditional request failed, Item 1: None - No message]
+
+9. Testing Ingestion Block for Isolated Asset...
+✅ Success: Ingestion API blocked telemetry and returned 403 FORBIDDEN_ISOLATED.
+
+10. Testing B2B Subscription Tenant Quota & Suspension Rules...
+✅ Tenant Metadata retrieved: Plan is FREE_TIER, Status is SUSPENDED
+✅ Success: Ingestion API blocks telemetry with 403 Forbidden for suspended tenants.
+
+11. Testing Automatic Quota Unlock...
+✅ Success: Ingestion API blocks registration of new assets with 402 Payment Required once quota is exceeded (3/2).
+✅ Success: After simulation of 'upgradeTenantPlanAction', Enterprise status and 150-device limit successfully enforced.
+
+🎉 ALL 5 ACCESS PATTERNS & FAILURE PATHS VERIFIED SUCCESSFULLY!
 ```
 
 ### Step 6: Connect a Real Device

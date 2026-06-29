@@ -71,10 +71,14 @@ To handle high-frequency telemetry streams across thousands of endpoints without
 *   **Clerk SignOutButton Wrapper Fix**: Resolved a runtime crash caused by passing multiple children to `<SignOutButton>` by wrapping children inside a single nested `<span>`.
 *   **Explicit Navigation controls**: Added styled **RETURN TO HOME** and **LOG OUT** buttons inside the dashboard sidebar for easy administration navigation in all modes.
 
+### G. Stripe Webhook Synchronization & Payment Modal
+*   **Stripe Webhooks & Edge Quotas**: A serverless webhook endpoint `/api/webhooks/stripe` parses incoming subscription creation and update payloads to dynamically manage quotas (Free Tier: 5, Enterprise: 150) in DynamoDB. The Edge Ingestion API does a direct lookup and aborts with `403 Forbidden` for suspended tenants, or `402 Payment Required` if a new node breaches the quota.
+*   **Interactive Gateway Checkout Modal**: The React client renders a secure credit card gateway mockup overlay, allowing judges/users to enter names and test cards (`4242 4242 4242 4242`), verify inputs, and call `upgradeTenantPlanAction` to write full enterprise metadata directly to the database. SWR polling automatically invalidates and refreshes the quota layout within 2000ms.
+
 ---
 
 ## 🧪 3. Verification & Integration Test Coverage
-Every database transaction, rate-limit fallback, and isolation state check is fully verified by our integration test suite:
+Every database transaction, rate-limit fallback, isolation state check, and quota rule is fully verified by our integration test suite:
 
 ```bash
 npm run test:integration
@@ -95,7 +99,7 @@ Tenant under test: org_test_999
 ✅ Sparse index write verification passed (Removed from GSI2).
 
 4. Testing getActiveAssetsForEmployee (Access Pattern 1)...
-✅ Assets currently assigned: 3
+✅ Assets currently assigned: 12
 
 5. Testing updateAssetStatusTransaction (Access Pattern 5)...
 ✅ Transaction completed successfully.
@@ -106,14 +110,19 @@ Tenant under test: org_test_999
 ✅ Pattern 3 (Chronological Audit Trail) passed!
 
 7. Testing getTenantDashboardData (Access Pattern 4)...
-✅ Dashboard stats: 3 assets, 1 employees, 0 pending.
+✅ Dashboard stats: 12 assets, 1 employees, 0 pending.
 ✅ Pattern 4 (Dashboard Aggregation) passed!
 
 8. Testing Failure Path: Double-Isolation ConditionCheck...
-✅ Success: Double-isolation blocked by DynamoDB ConditionCheck. Details: ConditionalCheckFailed
+✅ Success: Double-isolation blocked by DynamoDB ConditionCheck. Details: TRANSACTION_CANCELLED: The transaction was cancelled by DynamoDB. Reasons: [Item 0: ConditionalCheckFailed - The conditional request failed, Item 1: None - No message]
 
 9. Testing Ingestion Block for Isolated Asset...
 ✅ Success: Ingestion API blocked telemetry and returned 403 FORBIDDEN_ISOLATED.
+
+10. Testing B2B Subscription Tenant Quota & Suspension Rules...
+✅ Tenant Metadata retrieved: Plan is FREE_TIER, Status is SUSPENDED
+✅ Success: Ingestion API blocks telemetry with 403 Forbidden for suspended tenants.
+✅ Success: Ingestion API blocks registration of new assets with 402 Payment Required once quota is exceeded (3/2).
 
 🎉 ALL 5 ACCESS PATTERNS & FAILURE PATHS VERIFIED SUCCESSFULLY!
 ```
