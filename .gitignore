@@ -44,5 +44,11 @@ next-env.d.ts
 
 
 .vercel
-.env*
 /tmp_stitch/
+
+# AI Guidance & Agent files (local only)
+/AGENTS.md
+/AGENT_RULES.md
+/CLAUDE.md
+/PROJECT_DNA.md
+
