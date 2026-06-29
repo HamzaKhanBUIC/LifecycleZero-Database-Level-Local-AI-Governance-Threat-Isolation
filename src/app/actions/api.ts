@@ -460,7 +460,10 @@ export async function seedActiveTenantAction(tenantIdOverride?: string) {
         TenantSlug: "sandbox-ent",
         CreatedAt: timestamp,
         Status: "ACTIVE",
-        Plan: "FREE_TIER"
+        Plan: "ENTERPRISE",
+        MaxAllowedEndpoints: 150,
+        StripeCustomerId: "cus_live_sandbox123",
+        StripeSubscriptionId: "sub_live_sandbox123"
       } as Tenant
     }));
 
