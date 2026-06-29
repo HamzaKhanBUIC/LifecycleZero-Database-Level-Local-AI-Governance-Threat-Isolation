@@ -70,9 +70,7 @@ To address this offline threat, I built **LifecycleZero** for the #H0Hackathon�
 Key highlights:
 🚀 **Serverless Scalability**: Telemetry metadata is ingested in Next.js Edge routes, buffered in AWS SQS, and processed asynchronously in sub-50ms.
 💾 **DynamoDB Single-Table Design**: Features multi-tenant isolation, sparse indexing (GSI2) for instant dashboard alerts, and database partition write-sharding.
-🔒 **Production-Grade Security**: Includes host-specific agent key rotation on first handshake, BIOS-locked hardware UUID drift verification (anti-spoofing), and ACID containment transactions.
-
-Read the deep dive on how I built it on Dev.to: [Insert Dev.to Link]
+Read the deep dive on how I built it on Dev.to: [Dev.to Single-Table Architecture Article](https://dev.to/dummy_devto_id/shadow-ai-governance-on-dynamodb)
 
 #B2B #SaaS #AWS #Nextjs #CyberSecurity #Hackathon
 

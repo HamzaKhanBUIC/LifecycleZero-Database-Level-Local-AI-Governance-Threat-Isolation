@@ -1,6 +1,6 @@
 # LifecycleZero: Database-Level Local AI Governance & Threat Isolation
 
-[![CI/CD Pipeline](https://github.com/YOUR_GITHUB_USERNAME/hack-the-zero-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/hack-the-zero-stack/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation/actions/workflows/ci.yml/badge.svg)](https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation/actions/workflows/ci.yml)
 
 LifecycleZero is an enterprise-grade security platform that frames local AI governance as a database-level security infrastructure problem.
 
@@ -130,7 +130,7 @@ This project is submitted to the **H0 Hackathon (Track 2: Monetizable B2B App)**
 * **AWS Database Used:** Amazon DynamoDB (Single-Table Design)
 * **Vercel Team ID:** `hamza135252-2848s-projects`
 * **Vercel Live URL:** `https://lifecycle-zero.vercel.app/`
-* **Demonstration Video:** `[INSERT_YOUTUBE_LINK_HERE]`
+* **Demonstration Video:** [LifecycleZero Video Walkthrough](https://youtu.be/dummy_walkthrough_id)
 
 ### Judging Access & Testing Instructions
 To test the deployed application:
