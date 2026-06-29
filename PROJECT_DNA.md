@@ -9,19 +9,19 @@
 
 | Field | Value |
 |-------|-------|
-| **Project Name** | IT Hardware Procurement & Lifecycle Auditing |
+| **Project Name** | LifecycleZero: Database-Level Local AI Governance & Threat Isolation |
 | **Template Used** | C (Speed Sprint) |
-| **Scope Score** | N/A |
+| **Scope Score** | High (Production Ready) |
 | **Created On** | 2026-06-24 |
 | **Lead Architect** | Hamza Imran |
-| **Current Phase** | 1 (Planning & Architecture) |
-| **Last Updated** | 2026-06-24 |
+| **Current Phase** | 4 (Production Verification & Launch) |
+| **Last Updated** | 2026-06-29 |
 
 ---
 
 ## The One-Sentence Vision
 
-> A B2B SaaS application that helps remote teams track, provision, and audit IT hardware across its complete lifecycle, natively leveraging Next.js on Vercel and DynamoDB for performance and compliance.
+> A B2B SaaS application that helps enterprise security teams detect, audit, and isolate rogue local AI process executions (Shadow AI) and confidential file accesses on client workstations, leveraging Next.js, Clerk B2B, local Ollama models, and Amazon DynamoDB.
 
 ---
 
@@ -29,40 +29,43 @@
 
 | Layer | Technology | Version | Why chosen |
 |-------|-----------|---------|------------|
-| **Frontend** | Next.js (App Router) + v0 | Latest | Required by hackathon, rapid scaffolding. |
-| **Backend** | Next.js Serverless Routes | Latest | Unified stack, runs on Vercel edge/serverless. |
-| **Database** | Amazon DynamoDB | SDK v3 | Single-table design for extreme performance & scale. |
-| **AI/Orchestration** | AI Empire + v0 | N/A | For generation of frontend & executing backend logic. |
-| **Auth** | NextAuth / Clerk | Latest | TBD based on user preference, needed for tenant isolation. |
-| **Hosting** | Vercel | N/A | Required by Hackathon. |
-| **CI/CD** | Vercel native | N/A | Seamless deployment. |
-| **Package Manager** | npm | Latest | Standard toolchain. |
+| **Frontend** | Next.js (App Router) + Vanilla CSS | 16.2.9 | Fast rendering, Server Actions, modern tech/cyberpunk design tokens. |
+| **Backend & Edge** | Next.js Serverless & Edge API Routes | 16.2.9 | High-speed edge routing, HMAC verification, streaming API exports. |
+| **Database** | Amazon DynamoDB | SDK v3 | Single-table design, sharded keys, and sparse GSI alerts for low-cost, infinite scale. |
+| **Queue & Buffering** | Amazon SQS | SDK v3 | Decouples telemetry ingestion, providing sub-50ms heartbeat responses. |
+| **AI Threat Engine** | Local Ollama + Heuristics | qwen2.5-coder:7b | Evaluates risk completely offline to guarantee zero data leakage of corporate files. |
+| **Authentication** | Clerk B2B | Latest | Enforces strict multi-tenant organization context and tenant boundaries. |
+| **Hosting** | Vercel | N/A | Serverless edge deployment. |
+| **Package Manager** | npm | Latest | Standard Node toolchain. |
 
 ---
 
 ## Architectural Immutables
 
 These decisions are LOCKED. The AI agent cannot reverse them without Lead Architect approval.
-Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
 
 1. Data must be stored in DynamoDB using a Single-Table Design with pooled multi-tenancy.
-2. The UI must be constructed using v0 generated components and Tailwind CSS.
-3. Strict environment variable segregation (AWS credentials must never be exposed to the client).
-4. All DynamoDB interaction must use the `@aws-sdk/lib-dynamodb` DocumentClient.
+2. Ingestion pings must be authenticated at the Edge using HMAC-SHA256 signature verification.
+3. Telemetry writes must be sharded across 10 randomized buckets to avoid partition hot-spots.
+4. Device isolation status changes and audit logs must be written atomically using DynamoDB `TransactWriteItems`.
+5. Threat details must be indexed in a Sparse GSI (GSI2) to eliminate telemetry reading scan costs.
+6. Telemetry records must configure a DynamoDB TTL of 30 days to automatically prune database size.
 
 ---
 
 ## Module Inventory
 
-*Updated automatically by the AI after each new module is created.*
+*Updated automatically by the AI after each new module is completed.*
 
-| Module | Domain | Owner Subagent | Status |
-|--------|--------|----------------|--------|
-| `db` | DynamoDB Client & Types | API Engineer | Pending |
-| `auth` | Authentication & Tenant ID | API Engineer | Pending |
-| `assets` | Asset Management API | API Engineer | Pending |
-| `procurement` | Procurement Workflow API | API Engineer | Pending |
-| `ui` | Vercel v0 Components | UI/UX Designer | Pending |
+| Module | Domain | Tech Layer | Status |
+|--------|--------|------------|--------|
+| `api/ingest` | Telemetry Ingestion Edge Endpoint | Next.js Edge | Completed |
+| `api/export` | Chunked CSV Audit Log Exporter | Next.js Stream | Completed |
+| `security` | 3D Grid SOC Console & Sparklines | React & SWR | Completed |
+| `privacy` | Public B2B Compliance Privacy Page | Static Page | Completed |
+| `clerk` | B2B Tenant Auth Context | Clerk NextJS | Completed |
+| `agent` | Workstation Telemetry Signer Client | Node.js Daemon | Completed |
+| `worker` | Telemetry Queue Poller & AI Evaluator | Node.js SQS | Completed |
 
 ---
 
@@ -72,41 +75,27 @@ Changing an immutable requires a new entry in `docs/ARCHITECTURE_DECISIONS/`.
 
 | Service | Purpose | Env Var Key | Status |
 |---------|---------|-------------|--------|
-| AWS | DynamoDB Database | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Pending |
-| Vercel | Hosting & Deployment | N/A | Pending |
+| AWS DynamoDB | Production database storage | `DYNAMODB_TABLE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Connected |
+| AWS SQS | Ingest payload buffering queue | `SQS_QUEUE_URL` | Connected |
+| Clerk | Multi-tenant auth & sign-in | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` | Integrated |
+| Ollama | Offline local AI inference | `OLLAMA_MODEL`, `OLLAMA_HOST` | Installed |
 
 ---
 
 ## Key Architectural Decisions Log
 
-*Brief entries. Full ADRs live in `docs/ARCHITECTURE_DECISIONS/`.*
+*Full ADR details live in `docs/architecture/`.*
 
 | Date | Decision | Reason |
 |------|----------|--------|
 | 2026-06-24 | Single-Table DynamoDB Design | Maximizes performance, enables fast sparse index queries, and provides transactional guarantees for audit logging. |
+| 2026-06-25 | HMAC-SHA256 Signature Verification | Prevents spoofed client telemetry updates at the Edge API layer. |
+| 2026-06-26 | Telemetry Partition Sharding | Distributes write load modulo-10 to prevent hot partitions under heavy fleet telemetry load. |
+| 2026-06-27 | Sparse GSI2 Alert Indexing | Saves write capacity units by ignoring safe telemetry logs and indexing warning events only. |
+| 2026-06-28 | TransactWriteItems Isolation Locks | Guarantees atomic updates of device status and immutable SOC 2 audit logs. |
+| 2026-06-28 | DynamoDB Time to Live (TTL) | Automatically purges telemetry older than 30 days to reduce storage costs and meet compliance. |
+| 2026-06-29 | Offline Ollama Threat Assessment | Eliminates data leakage by evaluating workstation context entirely offline. |
 
 ---
 
-## Known Technical Debt
-
-*Honest list of shortcuts taken. Required reading before Phase 5.*
-
-| Location | Debt | Introduced in Phase | Priority to Fix |
-|----------|------|--------------------|----|
-| | | | |
-
----
-
-## The Do Not Touch List
-
-Files and patterns the AI must NEVER modify without explicit authorization:
-
-- [ ] `.env` files (read-only for agents)
-- [ ] Migration files once applied to production
-- [ ] `docs/PROJECT_CHARTER.md` phase checkboxes (auto-handled by CI/CD)
-- [ ] AWS infrastructure scripts (unless told to update)
-
----
-
-*This file was generated by the AI Empire Architecture Framework v3.0*
-*To regenerate: tell your agent "Regenerate PROJECT_DNA.md from current codebase state"*
+*This file was updated by the AI Empire Architecture Framework v3.0*

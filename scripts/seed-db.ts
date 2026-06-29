@@ -6,7 +6,7 @@ dotenv.config({ path: ".env.local" });
 
 const isLocal = process.env.DB_LOCAL === "true";
 const tableName = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
-const demoTenantId = "org_demo_123";
+const demoTenantId = "org_3FlCIAyLsUAbJaMCxXpsgPxeGQa";
 
 const client = new DynamoDBClient({
   region: process.env.AWS_REGION || "us-east-1",

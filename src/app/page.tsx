@@ -229,9 +229,10 @@ export default function WelcomePage() {
             </span>
           </div>
 
-          {/* Legal / version info */}
           <div className="flex items-center gap-6 text-center">
             <span>© 2026 LIFECYCLEZERO SECURITY OPERATIONS CENTER</span>
+            <span className="hidden md:inline text-zinc-600">|</span>
+            <a href="/privacy" className="hover:text-white transition-all underline underline-offset-4">PRIVACY POLICY</a>
             <span className="hidden md:inline text-zinc-600">|</span>
             <span className="hidden md:inline">Protocol: V9</span>
             <span className="hidden md:inline">Kernel: Stable</span>

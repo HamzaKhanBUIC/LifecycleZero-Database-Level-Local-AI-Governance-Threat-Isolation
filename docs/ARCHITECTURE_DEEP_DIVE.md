@@ -1,81 +1,162 @@
-# LifecycleZero: Architectural Deep-Dive & Pitch Deck Prep
+# LifecycleZero: Architectural Deep-Dive & System Blueprint
 
-This document serves as the absolute guide to the **LifecycleZero** product identity, B2B architecture, AWS integration, and technical justifications. It is designed to clarify all conceptual ambiguities and prepare you to defend the system against critical judge evaluations.
-
----
-
-## 🎯 1. The Core Vision: What are we building?
-**LifecycleZero** is a B2B SaaS platform for **Local AI Governance and Threat Isolation**.
-
-*   **The Problem (Shadow AI & Data Leakage)**: 
-    Software developers and remote employees are downloading open-source LLMs (via Ollama, `llama.cpp`, or LM Studio) onto their workstations. They feed sensitive company files (confidential codebases, payroll sheets, customer PII) into these local models. Because these models run **offline and locally**, traditional network firewalls (CASB/SWG) and Endpoint Detection and Response (EDR) agents like CrowdStrike Falcon are **completely blind** to what is happening.
-*   **The Solution**:
-    LifecycleZero deploys a lightweight background service (daemon) to employee workstations. This daemon monitors local AI process execution and filesystem events, streaming metadata telemetry to a cloud control plane. If a threat is detected (e.g. a local model reading a payroll sheet), the administrator can isolate the host, cutting off its access and recording a secure custody audit log in DynamoDB.
+This document provides a comprehensive technical blueprint of **LifecycleZero**—a decentralized, B2B endpoint security platform built to govern, detect, and isolate rogue local AI usage on enterprise workstations.
 
 ---
 
-## 🏢 2. Local AI vs. Cloud Control Plane: Why Clerk & AWS?
-*   **The Monitored Telemetry is Local**: The processes being monitored (`ollama`, `llama.cpp`) run locally on employee workstations.
-*   **The Governance Plane is Cloud-Native**: An enterprise security team needs a centralized, highly secure portal to monitor their fleet of 1,000+ endpoints. This dashboard runs on **AWS and Vercel**.
-*   **Why Clerk?**
-    Clerk provides secure multi-tenant B2B Authentication. It isolates different companies (e.g., Acme Corp vs. FinTech Inc). Administrators sign up, create their organization workspace, invite their IT security team, and securely manage their fleet.
-*   **Why AWS DynamoDB?**
-    It stores the fleet directories, incoming telemetry, compliance audit logs, and isolation states. We use a **Single-Table Design** to map all entities into one table, using Partition Keys (`PK = TENANT#<TenantId>`) to guarantee absolute tenant isolation.
-*   **Why AWS SQS?**
-    It decouples telemetry ingestion. Telmetry pushes to SQS in sub-50ms (giving the endpoint agent an instant `202 Accepted`). Background workers pull from the queue and evaluate risk asynchronously, preventing database lock bottlenecks.
+## 🗺️ 1. Global System Architecture
 
----
-
-## 🔐 3. Data Privacy: How is it kept private?
-*   **Metadata Only**: The workstation daemon only streams **metadata** (process names, CPU/RAM usage, network egress volume, and file names accessed).
-*   **No File Uploads**: It **never** uploads the actual file contents (e.g., it reports that `payroll.xlsx` was read, but never transmits the contents of `payroll.xlsx`). This preserves employee privacy and complies with GDPR, CCPA, and HIPAA requirements.
-
----
-
-## 🏢 4. B2B Customer Onboarding & Lifecycle Flow
+The LifecycleZero architecture decouples high-speed client-side telemetry ingestion from heavy offline AI threat analysis. This ensures that client machines receive low-latency heartbeats, data is buffered safely, and threat analysis is completed in an isolated network plane.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Admin as Enterprise Admin
-    participant Clerk as Clerk B2B Auth
-    participant Webhook as API Webhook (/api/webhooks/clerk)
-    participant DB as DynamoDB Single-Table
-    participant MDM as Intune/Jamf MDM
-    participant Daemon as Host Agent Daemon
+graph TD
+    %% Define Classes & Styles
+    classDef client fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff
+    classDef gateway fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff
+    classDef buffer fill:#78350f,stroke:#f59e0b,stroke-width:2px,color:#fff
+    classDef worker fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#fff
+    classDef database fill:#172554,stroke:#3b82f6,stroke-width:2px,color:#fff
 
-    Admin->>Clerk: Sign Up & Create Org ("Acme Corp")
-    Clerk->>Webhook: Event: organization.created (org_acme_123)
-    Webhook->>DB: Put Item: PK=TENANT#org_acme_123, SK=METADATA
-    Admin->>MDM: Deploy Host Agent Daemon + org_acme_123 token
-    MDM->>Daemon: Push and run daemon on employee laptops
-    Daemon->>Webhook: POST /api/ingest (First telemetry heartbeat)
-    Webhook->>DB: Auto-Enroll: PK=TENANT#org_acme_123, SK=ASSET#AST-001
+    %% Node Definition
+    subgraph Client Workstations
+        Agent[Node.js Telemetry Agent]
+        Signer[HMAC-SHA256 Signer]
+    end
+    Agent --- Signer
+    class Agent,Signer client
+
+    subgraph Control Plane
+        Dashboard[Next.js SOC Dashboard]
+        API[Edge Ingestion API]
+        Validator[Signature Validator]
+        IsolateCheck[Isolate Check / 403 Block]
+    end
+    API --- Validator
+    Validator --- IsolateCheck
+    class Dashboard,API,Validator,IsolateCheck gateway
+
+    subgraph Message Buffer
+        SQS[Amazon SQS Queue]
+    end
+    class SQS buffer
+
+    subgraph Threat Analysis Engine
+        Worker[Worker Daemon]
+        Ollama[Local Ollama instance]
+    end
+    Worker --- Ollama
+    class Worker,Ollama worker
+
+    subgraph Persistent Storage
+        DynamoDB[(AWS DynamoDB Single-Table)]
+        SparseIndex[GSI2 Sparse Alert Index]
+    end
+    DynamoDB --- SparseIndex
+    class DynamoDB,SparseIndex database
+
+    %% Flow Connections
+    Signer -->|1. HTTP POST with HMAC| API
+    IsolateCheck -->|2. Queue Telemetry| SQS
+    SQS -->|3. Poll Messages| Worker
+    Worker -->|4. Heuristic & LLM Eval| Ollama
+    Worker -->|5. PutItem / TransactWrite| DynamoDB
+    Dashboard -->|6. Query Data| DynamoDB
+    Dashboard -->|7. Post Isolate Command| IsolateCheck
 ```
 
 ---
 
-## ⚡ 5. Core Technical Features Explained
+## 💻 2. Frontend Architecture & UI/UX Stack
 
-### 1. ACID Containment Transactions (`TransactWriteItems`)
-*   **The Risk**: When isolating a compromised host, the database update must succeed, and the SOC 2 audit log must be written. If one succeeds but the other fails, the compliance trail is broken.
-*   **The Fix**: We use DynamoDB's `TransactWriteItems` transaction. It atomically updates the asset status to `ISOLATED` (with a condition check ensuring the host was active) and writes an immutable audit record (`SK = AUDIT#<AssetId>#<Timestamp>`). If either step fails, the entire transaction rolls back instantly.
+The administrator dashboard is designed as a high-fidelity, high-performance Security Operations Center (SOC) running inside a Next.js single-page application.
 
-### 2. Cost-Optimized Sparse GSI (`GSI2`)
-*   **The Risk**: 99.8% of heartbeat telemetry from endpoints is benign. Creating database indexes for every single normal event would make reads and writes incredibly expensive.
-*   **The Fix**: We configured a **Sparse GSI**. Index attributes (`GSI2PK`/`GSI2SK`) are only written when a risk evaluator flags a telemetry event as `CRITICAL` or `WARNING`. The React dashboard queries `GSI2` directly, retrieving active threats in milliseconds with zero-cost O(1) database scans instead of full-table scans.
+### A. Technology Stack
+*   **Next.js 16 (App Router & Turbopack):** Capitalizes on server-side rendering for fast initial loads, paired with Server Actions for direct, type-safe database queries.
+*   **Vanilla CSS Design System:** Standardized style tokens configured inside `globals.css` with a high-end cyberpunk aesthetic (matte black backgrounds, electric violet grids, and terminal neon green status pills).
+*   **Recharts Data Layer:** Visualizes fleet RAM and CPU telemetry history using responsive area graphs.
+*   **Web Audio API Synth Alerts:** Triggers localized acoustic audio frequencies (warning alerts) directly in the browser when active security incidents occur.
+
+### B. State Management & Live Data Polling
+*   **SWR (State-While-Revalidate):** The client dashboard uses SWR to poll the DynamoDB database every **2,000ms**. SWR automatically handles query deduplication, memory caching, tab-focus revalidation, and background network recovery, preventing client-side memory leaks.
+*   **Canvas-Rendered Sparklines:** To render 100+ active device history graphs on the grid page without DOM lag, we draw metrics directly onto HTML5 `<canvas>` elements rather than rendering heavy SVG DOM nodes.
 
 ---
 
-## 🩺 6. Critical Review: Objection Handling for Judges
+## ⚡ 3. Backend & Edge Layer Architecture
 
-#### Objection 1: "If the local user gets admin rights, they can just kill the daemon."
-*   **Mitigation**: In production, the daemon runs as a privileged system service (root daemon / Windows Service) deployed via MDM. If a user forces it offline, our **Silent Agent Detection** logic flags the host as `UNREACHABLE` on the server-side, triggering alerts for the security team. Furthermore, our **Two-Way Isolation** blocks the host server-side (Next.js Edge returns 403 Forbidden to any API requests from that machine) even if the local agent is modified.
+The backend focuses on high-speed ingestion, cryptographically securing incoming data, and maintaining strict multi-tenant isolation.
 
-#### Objection 2: "Is SQS + Local AI processing too slow for real-time isolation?"
-*   **Mitigation**: We implement **Two-Tiered Containment**:
-    1.  **Tier 1 (Deterministic Fast Path)**: The Edge Gateway runs fast regex/heuristic checks on incoming telemetry. If it sees a critical process accessing a known sensitive file, it quarantines the host instantly (<50ms).
-    2.  **Tier 2 (Asynchronous AI Path)**: Telemetry is queued on SQS and evaluated by a local Ollama LLM container to detect evasion techniques (e.g. LLM execution under a renamed binary) and compile compliance logs.
+### A. Edge Telemetry Ingestion (`/api/ingest`)
+*   **Cryptographic HMAC-SHA256 Validation:** To prevent telemetry spoofing, the client agent computes a signature of the JSON payload combined with a timestamp using a pre-shared key. The Edge handler recomputes this signature. If they do not match, or if the timestamp is older than 5 minutes (replay protection), it returns `400 Bad Request`.
+*   **Active Isolation Enforcement (403 Block):** Before validating payloads, the Edge api checks the cache for the device's isolation status. If the status is `ISOLATED`, the handler short-circuits and returns a `403 Forbidden` response, instantly blocking further data egress from that machine.
 
-#### Objection 3: "Is the AWS SQS queue worker serverless?"
-*   **Mitigation**: SQS worker daemons run inside continuous containerized environments (like AWS ECS Fargate). It uses long-polling (`WaitTimeSeconds: 20`) to keep persistent HTTP connections, eliminating serverless cold-start latency.
+### B. Buffering & Asynchronous Decoupling (SQS)
+*   Instead of writing pings directly to the database (which creates bottlenecks), the Edge API pushes payload metadata onto an **Amazon SQS Queue** and returns an instant `202 Accepted` to the client in under **50ms**.
+
+### C. Streaming Audits (`/api/export/audit/csv`)
+*   To support corporate SOC 2 audits, administrators can export device isolation histories. The CSV exporter uses **HTTP Chunked Streaming**. Instead of compiling the entire CSV in memory, it queries DynamoDB and streams rows to the client chunk-by-chunk, keeping Vercel memory overhead at less than **10MB** even for millions of records.
+
+---
+
+## 🕵️ 4. Worker Daemon & Offline Threat AI
+
+Threat evaluation runs completely asynchronously inside an isolated worker daemon, protecting confidential corporate file paths from leaking to third-party public AI providers.
+
+```mermaid
+flowchart LR
+    Queue[SQS Queue] -->|Poll| Worker[Worker Daemon]
+    Worker -->|1. Process Check| Heuristics{Heuristics Engine}
+    Heuristics -->|Matches Signatures| Block[Quarantine State]
+    Heuristics -->|Unknown/Obfuscated| LLM[Local Ollama / qwen2.5-coder]
+    LLM -->|Evaluate Context| Decision{Risk Decision}
+    Decision -->|WARNING/CRITICAL| Alert[Write GSI2 Index]
+    Decision -->|SAFE| Log[Write Telemetry Table]
+```
+
+### A. Heuristics Engine (Fast Path)
+The worker checks incoming telemetry against local signature rules first:
+*   Known unauthorized LLM processes (`llama.cpp`, `ollama`, `lmstudio`, `jan.ai`).
+*   Filesystem access to sensitive corporate directories or matching keywords (e.g. `payroll.xlsx`, `id_rsa`, `.env`, `confidential_roadmap.pdf`).
+
+### B. Local AI Analysis (Deep Path)
+If a process name is renamed or obfuscated, but exhibits high CPU/RAM utilization and accesses sensitive files, the telemetry is sent to a **local Ollama instance** running the `qwen2.5-coder:7b` model:
+*   The LLM analyzes the process context and file system logs.
+*   It responds in raw JSON containing the calculated `riskLevel` (`SAFE`, `WARNING`, `CRITICAL`) and a clear `reasoning` statement.
+
+---
+
+## 🗄️ 5. Database & Data Modeling (AWS DynamoDB)
+
+LifecycleZero uses a single Amazon DynamoDB table (`LifecycleZero_Assets`) partitioned to guarantee security, performance, and low costs.
+
+```
+                  LifecycleZero_Assets Single-Table Partition Map
+┌───────────────────────────────┬────────────────────────────────┬───────────────────────────┐
+│ PARTITION KEY (PK)            │ SORT KEY (SK)                  │ ATTRIBUTES                │
+├───────────────────────────────┼────────────────────────────────┼───────────────────────────┤
+│ TENANT#org_acme_123           │ METADATA                       │ Name, Status, Plan        │
+│ TENANT#org_acme_123           │ ASSET#AST-MAC-051              │ AssetName, Status, Serial │
+│ TENANT#org_acme_123           │ EMP#emp_john                   │ Email, Name, Department   │
+│ TENANT#org_acme_123#TELEMETRY │ TELEMETRY#AST-MAC-051#17826... │ CpuUsage, ProcessName     │
+│ TENANT#org_acme_123           │ AUDIT#AST-MAC-051#17826...     │ Action, Details, Actor    │
+└───────────────────────────────┴────────────────────────────────┴───────────────────────────┘
+```
+
+### A. Randomized Telemetry Sharding (Write Bottleneck Prevention)
+In standard DynamoDB, a single partition can only handle 1,000 writes per second. If a B2B tenant has 10,000 active workstations streaming telemetry, the partition will bottleneck. 
+*   **The Solution:** We distribute telemetry rows across **10 virtual sharding buckets**:
+    `PK = TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`
+*   This spreads the write workload evenly across physical AWS storage nodes, unlocking infinite write scalability.
+
+### B. Sparse GSI for Zero-Cost Alert Filtering
+*   99% of workstation logs are completely safe. Writing all safe logs to a Global Secondary Index is incredibly expensive.
+*   **The Solution:** Our `GSI2` (Alert Index) uses a **Sparse Design**. The attributes `GSI2PK` and `GSI2SK` are **only** populated when `RiskLevel` is `WARNING` or `CRITICAL`.
+*   As a result, safe logs are ignored by the index, saving database write costs, and letting the dashboard fetch alerts instantly without doing full-table scans.
+
+### C. ACID Transaction Locks (`TransactWriteItems`)
+*   When isolating a device, we must update the device status to `ISOLATED` *and* write an audit trail record at the exact same time.
+*   We wrap these inside a `TransactWriteItems` transaction. If the audit log fails to write, or the device status is already changed, the entire transaction rolls back, guaranteeing data integrity.
+
+### D. Automated Compliance Retention (TTL)
+*   Telemetry data carries a high storage cost. We enabled **Time to Live (TTL)** on the table.
+*   Every telemetry row is saved with a `TTL` timestamp set to **30 days** in the future. AWS automatically purges these items in the background at no cost, fulfilling SOC 2 compliance data-pruning standards automatically.
