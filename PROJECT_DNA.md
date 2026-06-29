@@ -103,6 +103,9 @@ These decisions are LOCKED. The AI agent cannot reverse them without Lead Archit
 | 2026-06-29 | Stripe Subscription & Quotas | Implements automated B2B monetization and enforces endpoint limits at the Edge API layer. |
 | 2026-06-29 | Unified API Class (`LifecycleZeroAPI`) | Consolidates all Server Actions and REST pings under a single client/server wrapper class. |
 | 2026-06-29 | Dynamic Clerk Auth Fallbacks | Prevents blank loading states on live deployments when Clerk keys are omitted by showing interactive mock portals. |
+| 2026-06-29 | Static Clerk Hydration & Proxy Middleware | Resolves live Vercel authentication hangs by statically importing ClerkProvider in RootLayout and default-exporting clerkMiddleware in proxy.ts. |
+| 2026-06-29 | Welcome Page loading states | Prevents user-facing redirection click delays by displaying dynamic Loader2 spinners on welcome page CTAs. |
+
 
 ---
 
