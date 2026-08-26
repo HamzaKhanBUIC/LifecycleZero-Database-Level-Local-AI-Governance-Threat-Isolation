@@ -1,142 +1,133 @@
-# LifecycleZero: Database-Level Local AI Governance & Threat Isolation
+# LifecycleZero
 
-[![CI/CD Pipeline](https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation/actions/workflows/ci.yml/badge.svg)](https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation/actions/workflows/ci.yml)
+> Database-level local AI endpoint telemetry governance and threat isolation engine with single-table Amazon DynamoDB architecture.
 
-LifecycleZero is an enterprise-grade security platform that frames local AI governance as a database-level security infrastructure problem.
-
-## The Framing: Why This Matters
-
-As local LLMs (like Ollama, Llama.cpp, and LM Studio) proliferate on corporate laptops, security teams face a massive blind spot. Employees are running open-source models locally to bypass corporate monitoring. Traditional endpoint protection (EDRs) and network firewalls are blind to this local context (e.g. which local model is reading which confidential file, and is it attempting network egress?). CrowdStrike Falcon cannot inspect the semantic file context of a local Ollama process because it operates at the kernel syscall layer, not the application context layer.
-
-LifecycleZero solves this by treating local AI safety as a high-throughput telemetry ingestion and database isolation problem:
-1. **Real-time Endpoint Telemetry Ingestion:** A lightweight endpoint daemon tracks local model activity (CPU, RAM, process names, files read, and network egress) and streams it to a secure gateway API.
-2. **Autonomous AI Threat Evaluation:** Telemetry is analyzed by a fast, secure, multi-tier local evaluation pipeline (using offline heuristic signature rules and local Ollama containers) to determine if a local LLM is acting maliciously.
-3. **Database-Level Isolation Policy:** If a threat is detected, an administrator executes a single-click transaction that alters the asset's security state, writes an immutable audit log, and immediately blocks further telemetry ingestion at the API gateway level.
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg?logo=next.js)](https://nextjs.org/)
+[![DynamoDB](https://img.shields.io/badge/Database-Amazon_DynamoDB-FF9900.svg?logo=amazondynamodb)](https://aws.amazon.com/dynamodb/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## Technical Architecture
+## Overview
+
+As local LLM engines (such as Ollama and Llama.cpp) run directly on developer workstations, security teams lack visibility into which local model processes are reading confidential files or initiating unapproved network egress.
+
+**LifecycleZero** treats local AI governance as a high-throughput telemetry ingestion and database isolation problem:
+1. **Endpoint Telemetry Streaming**: A lightweight agent monitors local model activity (CPU, RAM, process names, accessed paths, network sockets) and streams events to a Next.js gateway API.
+2. **Threat Evaluation**: Telemetry is evaluated against offline heuristic signatures and local threat evaluation pipelines.
+3. **Atomic Database Isolation**: When anomalous behavior is identified, an atomic DynamoDB transaction (`TransactWriteCommand`) transitions the asset state to `ISOLATED` and writes an immutable audit record, immediately blocking further ingestion at the API gateway.
+
+---
+
+## Architecture Flow
 
 ```mermaid
 graph TD
-    subgraph Local Laptop [Employee Endpoint]
-        Agent[Local CLI Agent] -- Real RAM/CPU/Processes --> API[Next.js Gateway API]
+    subgraph Endpoint [Workstation]
+        Agent[Local CLI Agent] -->|RAM/CPU/Process Telemetry| API[Gateway API]
     end
 
-    subgraph AWS Serverless Infrastructure
-        API -- 1. Risk Evaluation Query --> LLM{Ollama / Heuristics}
-        API -- 2. TransactWriteCommand --> DynamoDB[(DynamoDB Single-Table)]
+    subgraph Serverless Backend [AWS / Vercel]
+        API -->|1. Risk Evaluation| Eval{Heuristic Evaluator}
+        API -->|2. TransactWriteCommand| DDB[(DynamoDB Single-Table)]
         
-        subgraph DynamoDB Layout
+        subgraph Table Structure
             GSI1[GSI1: Employee-to-State Index]
             GSI2[GSI2: Sparse Alert Index]
-            TTL[TTL: 90-day Auto-Pruning]
+            TTL[TTL: 90-Day Auto-Purge]
         end
     end
 
-    subgraph Security Operations Center [SOC]
-        Dashboard[React SOC Dashboard] -- 1. Query Sparse GSI2 --> API
-        Dashboard -- 2. Trigger Isolation Transaction --> API
-        Dashboard -- 3. SOC 2 Export --> CSV[CSV/JSON Compliance Logs]
+    subgraph Management [SOC Console]
+        Dashboard[React SOC Console] -->|Query GSI2 Alerts| API
+        Dashboard -->|Execute Isolation Transaction| API
+        Dashboard -->|Export Audit Logs| CSV[CSV / JSON Compliance Logs]
     end
-
-    classDef aws fill:#FF9900,stroke:#FFF,stroke-width:2px,color:#fff;
-    class DynamoDB,GSI1,GSI2,TTL aws;
 ```
 
 ---
 
-## Technical Highlights
+## Technical Specifications
 
-AWS Database Architects and Solution Architects will appreciate the implementation details:
-
-* **Single-Table DynamoDB Schema:** Enforces multi-tenant isolation at the Partition Key level (`PK = TENANT#<TenantId>`). Tenant A can never query or accidentally scan Tenant B's data.
-* **Sparse Indexing (GSI2):** Only critical or warning telemetry events write to `GSI2PK`. This enables the SOC dashboard to fetch live alerts in milliseconds without performing expensive and slow table scans.
-* **Telemetry Write Sharding [NEW]:** Distributes raw telemetry writes across 10 physical partitions (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) to bypass Partition WCU thresholds.
-* **Host-Specific Key Rotation [NEW]:** Heartbeats are secured using device-specific agent keys generated dynamically on first handshake.
-* **Anti-Spoofing Verification [NEW]:** Gateway verifies hardware UUID signatures to prevent endpoint spoofing.
-* **Operational Data Purging (TTL):** Telemetry records are tagged with an expiration epoch (90 days). DynamoDB automatically purges them, preventing storage bloat.
-* **ACID Transactions (TransactWriteCommand):** Isolation commands atomically update the asset's status to `ISOLATED` and insert an immutable `AUDIT` log entry. The operation is fully atomic; it either completely succeeds or rolls back. Audit logs are structured to support SOC 2 Type II, ISO 27001, and NIST CSF reporting requirements.
-* **Endpoint Ingestion Block:** The Ingestion API enforces network quarantine. If a laptop's asset record is `ISOLATED`, the API immediately rejects its telemetry with `403 Forbidden` (`FORBIDDEN_ISOLATED`).
-* **Asynchronous Telemetry Queue (SQS):** Ingestion is built for scale. Telemetry is POSTed to the API gateway, instantly placed on an AWS SQS queue (with a filesystem queue fallback for local development), and returns `202 Accepted` in sub-50ms. A background worker script pulls events asynchronously to process them.
-* **Resilient SDK Client:** Configured with `maxAttempts: 5` and exponential backoff. Explicitly handles `TransactionCanceledException` (extracting cancellation codes) and `ProvisionedThroughputExceededException`.
-* **Vercel Edge Middleware:** Uses Edge Runtime to perform high-speed JWT authentication intercepting and pre-flight routing at the CDN edge before requests reach serverless Node.js functions.
-* **React Server Components (RSC):** The SOC dashboard grid uses Server Components to directly execute DynamoDB queries on the server, avoiding client-side waterfall requests and enabling sub-200ms initial paints for 100+ node grids.
+- **Single-Table DynamoDB Design**: Multi-tenant isolation enforced at the partition key boundary (`PK = TENANT#<TenantId>`).
+- **Sparse Alert Indexing (GSI2)**: Warning and critical alerts write to `GSI2PK`, allowing fast alert queries without full table scans.
+- **Partition Write Sharding**: Ingestion writes are distributed across 10 physical partition shards (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) to handle burst traffic.
+- **Hardware Attestation**: Verifies hardware UUID signatures on incoming telemetry packets to prevent endpoint spoofing.
+- **Atomic State Transitions**: Isolation operations use `TransactWriteCommand` to update asset status and commit audit log entries in a single atomic transaction.
+- **Endpoint Gatekeeping**: Once marked `ISOLATED`, the ingestion gateway rejects incoming telemetry with `403 Forbidden` (`FORBIDDEN_ISOLATED`).
+- **Automated Data Lifecycle**: Records include a 90-day epoch timestamp handled automatically by DynamoDB TTL.
 
 ---
 
-## Enterprise Deployment and Commercial Model
+## Repository Structure
 
-* **Master Playbook & Architecture Guide:** For a deep dive into schemas and configurations, review our **[Enterprise Architecture Playbook](docs/ARCHITECTURE_PLAYBOOK.md)**.
-* **Deployment Model:** LifecycleZero deploys as a lightweight, read-only system daemon pushed silently to macOS, Windows, and Linux endpoints via Mobile Device Management (MDM) tools (e.g., Jamf, Microsoft Intune, Kandji). No end-user interaction or local installation prompts are required.
-* **Onboarding Friction:** Zero. Once the MDM pushes the daemon, it automatically completes a secure handshake with the tenant's API gateway using a pre-configured hardware enrollment token, auto-provisioning its record in DynamoDB.
-* **Pricing Model:** Standard B2B SaaS subscription starting at $8 per monitored endpoint per month. An Enterprise tier offers custom security heuristic rules, on-premise local Ollama clusters for scale, and historical CSV audit logging, ensuring zero data leaves the corporate network.
-* **Customer Acquisition & Target Market:** Our initial target segment is 500-5000 employee technology companies with distributed remote workforces and existing Jamf or Intune MDM deployments.
+```
+.
+├── src/
+│   ├── app/                  # Next.js App Router and API routes
+│   ├── components/           # SOC dashboard and fleet management UI
+│   ├── lib/
+│   │   ├── dynamodb.ts       # Single-table DynamoDB client and transactions
+│   │   ├── telemetry.ts      # Telemetry ingestion and sharding logic
+│   │   └── security.ts       # Hardware signature verification
+│   └── agent/                # Local workstation telemetry collector
+├── scripts/                  # Local DynamoDB provisioning and seed scripts
+├── docker-compose.yml        # Local DynamoDB container setup
+└── package.json
+```
 
 ---
 
 ## Getting Started
 
-### 1. Prerequisites
-Ensure you have Docker running (for local DynamoDB) and Node.js installed.
+### Prerequisites
+- Node.js 18 or higher
+- Docker (for local DynamoDB testing)
 
-### 2. Install Dependencies
-```bash
-npm install
-```
+### Local Setup
 
-### 3. Provision & Seed Local DynamoDB
-Start the local DynamoDB container and seed the mock Acme Corp dataset (124 hardware assets):
-```bash
-# Start DynamoDB Local
-npm run db:local
+1. **Install dependencies**:
+   ```bash
+   git clone https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation.git
+   cd LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation
+   npm install
+   ```
 
-# In a new terminal, provision table & indices
-npm run db:provision-local
+2. **Provision and seed local DynamoDB**:
+   ```bash
+   # Start DynamoDB local container
+   npm run db:local
 
-# Seed the database
-npm run db:seed-local
-```
+   # Provision tables and indices
+   npm run db:provision-local
 
-### 4. Run the Dev Server & Queue Worker
-Start the Next.js development server and background queue worker:
-```bash
-# Terminal 1: Run dev server
-npm run dev
+   # Seed test dataset
+   npm run db:seed-local
+   ```
 
-# Terminal 2: Run queue worker
-npm run worker
-```
-Open http://localhost:3000 to view the SOC dashboard. (Login using Clerk Test Credentials).
+3. **Start dashboard and queue worker**:
+   ```bash
+   # Terminal 1: Next.js dev server
+   npm run dev
 
-### 5. Launch the Local Endpoint Agent
-Start the real endpoint agent on your local machine to begin streaming real CPU/RAM metrics:
-```bash
-npm run agent
-```
-*Tip:* The agent has a 15% chance to simulate a local threat process (e.g. `copilot-local` accessing `auth_tokens.json`). Watch the React dashboard and notice the real-time alert and live egress spike!
+   # Terminal 2: Queue worker
+   npm run worker
+   ```
 
----
-
-## SOC 2 Compliance Exports
-* **JSON Export:** `/api/export/audit` (Auditor-friendly nested events)
-* **CSV Export:** `/api/export/audit/csv` (Spreadsheet-ready compliance logs for upload into SIEMs)
+4. **Run local telemetry agent**:
+   ```bash
+   npm run agent
+   ```
 
 ---
 
-## Hackathon Submission Details (H0 Hackathon)
-This project is submitted to the **H0 Hackathon (Track 2: Monetizable B2B App)**.
+## Compliance & Audit Exports
 
-* **AWS Database Used:** Amazon DynamoDB (Single-Table Design)
-* **Vercel Team ID:** `hamza135252-2848s-projects`
-* **Vercel Live URL:** `https://lifecycle-zero.vercel.app/`
-* **Demonstration Video:** [LifecycleZero Video Walkthrough](https://youtu.be/dummy_walkthrough_id)
+- **JSON Audit Stream**: `/api/export/audit` (Structured compliance events)
+- **CSV Audit Log**: `/api/export/audit/csv` (Flat logs formatted for SIEM ingestion)
 
-### Judging Access & Testing Instructions
-To test the deployed application:
-1. Navigate to the Vercel Live URL.
-2. Sign in using the following test credentials:
-   * **Email:** `judge_tester@lifecyclezero.com`
-   * **Password:** `H0Hackathon2026!`
-3. You will have full SOC Analyst access to view the fleet, trigger simulated threats, and isolate test endpoints.
+---
 
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
