@@ -5,7 +5,7 @@ import { requireTenant, UnauthorizedError } from '@/lib/tenant';
 export async function GET() {
   try {
     // Export only the caller's own tenant (session or sandbox cookie), never a hard-coded one
-    const { tenantId: TENANT_ID } = await requireTenant();
+    await requireTenant();
     const [assets, alerts] = await Promise.all([
       getAssets(),
       getCrossAssetAlerts()
