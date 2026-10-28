@@ -1,133 +1,110 @@
 # LifecycleZero
 
-> Database-level local AI endpoint telemetry governance and threat isolation engine with single-table Amazon DynamoDB architecture.
+> A Next.js + DynamoDB console that ingests signed telemetry from workstations, flags risky local-AI processes, and lets an admin isolate a host in one atomic transaction — because security teams have no view of what local LLMs do on developer laptops.
 
-[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg?logo=next.js)](https://nextjs.org/)
-[![DynamoDB](https://img.shields.io/badge/Database-Amazon_DynamoDB-FF9900.svg?logo=amazondynamodb)](https://aws.amazon.com/dynamodb/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
----
-
-## Overview
-
-As local LLM engines (such as Ollama and Llama.cpp) run directly on developer workstations, security teams lack visibility into which local model processes are reading confidential files or initiating unapproved network egress.
-
-**LifecycleZero** treats local AI governance as a high-throughput telemetry ingestion and database isolation problem:
-1. **Endpoint Telemetry Streaming**: A lightweight agent monitors local model activity (CPU, RAM, process names, accessed paths, network sockets) and streams events to a Next.js gateway API.
-2. **Threat Evaluation**: Telemetry is evaluated against offline heuristic signatures and local threat evaluation pipelines.
-3. **Atomic Database Isolation**: When anomalous behavior is identified, an atomic DynamoDB transaction (`TransactWriteCommand`) transitions the asset state to `ISOLATED` and writes an immutable audit record, immediately blocking further ingestion at the API gateway.
+**Status:** Hackathon prototype · 161 commits, Jun–Aug 2026, all by Hamza Imran
+**Demo:** [Video](https://youtu.be/o0Iphx-f4z8) · [Live app](https://lifecycle-zero.vercel.app)
 
 ---
 
-## Architecture Flow
+## Architecture & Workflow
 
 ```mermaid
 graph TD
-    subgraph Endpoint [Workstation]
-        Agent[Local CLI Agent] -->|RAM/CPU/Process Telemetry| API[Gateway API]
-    end
-
-    subgraph Serverless Backend [AWS / Vercel]
-        API -->|1. Risk Evaluation| Eval{Heuristic Evaluator}
-        API -->|2. TransactWriteCommand| DDB[(DynamoDB Single-Table)]
-        
-        subgraph Table Structure
-            GSI1[GSI1: Employee-to-State Index]
-            GSI2[GSI2: Sparse Alert Index]
-            TTL[TTL: 90-Day Auto-Purge]
-        end
-    end
-
-    subgraph Management [SOC Console]
-        Dashboard[React SOC Console] -->|Query GSI2 Alerts| API
-        Dashboard -->|Execute Isolation Transaction| API
-        Dashboard -->|Export Audit Logs| CSV[CSV / JSON Compliance Logs]
-    end
+    Agent["scripts/lifecycle-agent.ts"] -->|HMAC-signed telemetry| API["POST /api/ingest"]
+    API -->|risk evaluation| Eval["src/lib/ai.ts: heuristics + optional Ollama"]
+    API --> DDB[(DynamoDB single table)]
+    API -.->|queue| SQS[SQS] -.-> Worker["scripts/telemetry-worker.ts (ECS Fargate)"]
+    Console["SOC console (Dashboard.tsx)"] -->|server actions| DDB
+    Console -->|manual isolate / restore| DDB
+    DDB --- Export["/api/export/audit, /api/export/audit/csv"]
 ```
 
----
+1. The agent samples the host and posts telemetry to `/api/ingest`.
+2. The gateway evaluates risk with tiered heuristics, optionally calling a local Ollama model (`src/lib/ai.ts`), and writes alerts.
+3. An admin reviews alerts in the console and isolates an asset. Isolation updates the asset and writes an audit record in one `TransactWriteCommand` (`src/lib/dao.ts`).
+4. An isolated host gets `403 FORBIDDEN_ISOLATED` on its next ingest call.
 
-## Technical Specifications
+Isolation is a manual action in the console (single or bulk). Detection only raises alerts; nothing isolates a host automatically.
 
-- **Single-Table DynamoDB Design**: Multi-tenant isolation enforced at the partition key boundary (`PK = TENANT#<TenantId>`).
-- **Sparse Alert Indexing (GSI2)**: Warning and critical alerts write to `GSI2PK`, allowing fast alert queries without full table scans.
-- **Partition Write Sharding**: Ingestion writes are distributed across 10 physical partition shards (`TENANT#<TenantId>#TELEMETRY#SHARD#<0-9>`) to handle burst traffic.
-- **Hardware Attestation**: Verifies hardware UUID signatures on incoming telemetry packets to prevent endpoint spoofing.
-- **Atomic State Transitions**: Isolation operations use `TransactWriteCommand` to update asset status and commit audit log entries in a single atomic transaction.
-- **Endpoint Gatekeeping**: Once marked `ISOLATED`, the ingestion gateway rejects incoming telemetry with `403 Forbidden` (`FORBIDDEN_ISOLATED`).
-- **Automated Data Lifecycle**: Records include a 90-day epoch timestamp handled automatically by DynamoDB TTL.
+## Key Features
 
----
+- **Single-table DynamoDB design:** tenant data keyed by `PK = TENANT#<TenantId>`; GSI1 for employee-to-state lookups; GSI2 as a sparse index holding only alerts (`scripts/provision-db.ts`).
+- **Write sharding:** telemetry is spread over 10 shards, `TENANT#<id>#TELEMETRY#SHARD#<0-9>` (`src/app/api/ingest/route.ts`).
+- **Signed ingest:** telemetry carries an HMAC-SHA256 signature, checked with a timing-safe compare; the hardware UUID is compared as a string when the request includes one.
+- **Atomic isolate + audit:** one transaction changes asset status and writes the audit entry.
+- **90-day TTL:** telemetry items carry an expiry timestamp; the table has TTL enabled.
+- **Audit export:** `/api/export/audit` (JSON) and `/api/export/audit/csv` (CSV).
+- **Risk evaluation:** heuristic rules with an optional local Ollama model and an offline fallback.
 
-## Repository Structure
-
-```
-.
-├── src/
-│   ├── app/                  # Next.js App Router and API routes
-│   ├── components/           # SOC dashboard and fleet management UI
-│   ├── lib/
-│   │   ├── dynamodb.ts       # Single-table DynamoDB client and transactions
-│   │   ├── telemetry.ts      # Telemetry ingestion and sharding logic
-│   │   └── security.ts       # Hardware signature verification
-│   └── agent/                # Local workstation telemetry collector
-├── scripts/                  # Local DynamoDB provisioning and seed scripts
-├── docker-compose.yml        # Local DynamoDB container setup
-└── package.json
-```
-
----
-
-## Getting Started
+## Quickstart & Installation
 
 ### Prerequisites
-- Node.js 18 or higher
-- Docker (for local DynamoDB testing)
+- Node.js 20.9 or newer (required by Next.js 16)
+- Docker, for DynamoDB Local
 
-### Local Setup
+### Setup
+```bash
+git clone https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation.git
+cd LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation
+npm install
 
-1. **Install dependencies**:
-   ```bash
-   git clone https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation.git
-   cd LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation
-   npm install
-   ```
+npm run db:local              # DynamoDB Local on :8000 (runs docker; keep this terminal open)
+npm run db:provision-local    # create table and indexes
+npm run db:seed-local         # seed test data
 
-2. **Provision and seed local DynamoDB**:
-   ```bash
-   # Start DynamoDB local container
-   npm run db:local
+npm run dev                   # terminal 2: Next.js dev server
+npm run worker                # terminal 3: queue worker
+npm run agent                 # terminal 4: local telemetry agent
+```
 
-   # Provision tables and indices
-   npm run db:provision-local
+The README commands were read against `package.json` scripts; they have not been re-run for this documentation pass.
 
-   # Seed test dataset
-   npm run db:seed-local
-   ```
+## Configuration & Environment
 
-3. **Start dashboard and queue worker**:
-   ```bash
-   # Terminal 1: Next.js dev server
-   npm run dev
+Read from code in `src/` and `scripts/`. There is no `.env.example` on `main`.
 
-   # Terminal 2: Queue worker
-   npm run worker
-   ```
+| Variable | Used for |
+| :--- | :--- |
+| `DB_LOCAL` | `true` points the DynamoDB client at DynamoDB Local (set by the npm scripts) |
+| `DYNAMODB_TABLE` | Table name |
+| `AWS_REGION` | AWS region |
+| `AWS_KMS_KEY_ARN` | Optional KMS key used when provisioning the table and SQS queue (`scripts/provision-*.ts`) |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk sign-in |
+| `NEXT_PUBLIC_SKIP_CLERK` | Skips Clerk for local/sandbox use |
+| `AGENT_API_KEY` | Enrollment/ingest key shared with the agent |
+| `INGEST_URL`, `TENANT_ID` | Agent: where to post and which tenant |
+| `OLLAMA_HOST`, `OLLAMA_MODEL` | Local model endpoint and name (defaults `http://localhost:11434`, `llama3`) |
+| `ADMIN_ROTATION_SECRET` | Token for the rotate-key webhook stub |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Optional rate-limit backing store |
 
-4. **Run local telemetry agent**:
-   ```bash
-   npm run agent
-   ```
+## Testing & Verification
 
----
+```bash
+npx tsc --noEmit            # typechecks
+npm run test:integration    # needs DynamoDB Local running (npm run db:local)
+```
 
-## Compliance & Audit Exports
+There are no unit tests on `main`. The integration script is the only test.
 
-- **JSON Audit Stream**: `/api/export/audit` (Structured compliance events)
-- **CSV Audit Log**: `/api/export/audit/csv` (Flat logs formatted for SIEM ingestion)
+## Architectural Decisions & Trade-offs
 
----
+- **Single table over several tables:** one table with tenant-prefixed keys keeps tenant queries to one partition key and lets the sparse GSI2 serve alert queries without scans. The cost is a harder-to-read key scheme.
+- **Shards over a single telemetry partition:** 10 shards spread burst writes at the cost of fan-out reads.
+- **Heuristics first, LLM optional:** rules give a deterministic result with no model; Ollama adds judgment for unfamiliar processes.
+- **Manual isolation:** an admin decides, which avoids automatic false-positive lockouts.
+
+## Limitations & Roadmap
+
+- **Telemetry is partly simulated.** In `scripts/lifecycle-agent.ts`, CPU, RAM, the process list and hardware UUID are real. `filesAccessed` and `networkEgress` are generated with `Math.random()` (about 15% of samples are synthetic "threats").
+- **"Hardware attestation" is a string compare** of the UUID, skipped if the request omits it. It is not cryptographic attestation.
+- **Detection does not isolate.** Isolation is a manual console action.
+- **Audit exports are hard-coded** to the sandbox tenant `org_demo_123`.
+- **The live app runs in a sandbox mode** that bypasses Clerk by design; do not put real data in it.
+- **Known security gaps on `main`:** webhook signatures, tenant selection in server actions and fallback keys are addressed in [open PR #1](https://github.com/HamzaKhanBUIC/LifecycleZero-Database-Level-Local-AI-Governance-Threat-Isolation/pull/1), which is not merged. Until it is, treat this as a demo, not a deployable product.
+- Enrollment keys are global rather than per tenant; the rate limiter is in-memory and per instance.
+- The dashboard tests Ollama from the browser while evaluation runs on the server, so a local model cannot be used from the hosted app.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).
