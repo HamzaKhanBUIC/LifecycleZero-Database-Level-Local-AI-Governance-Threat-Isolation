@@ -26,6 +26,9 @@ jobs:
     - name: Run Linter
       run: npm run lint --if-present
 
+    - name: Run Unit Tests
+      run: npm test
+
     - name: Run Build
       run: npm run build
       env:
