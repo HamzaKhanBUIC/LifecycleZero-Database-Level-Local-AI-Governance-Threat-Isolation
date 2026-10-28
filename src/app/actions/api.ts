@@ -16,6 +16,7 @@ import {
   getTenantMetadata
 } from "@/lib/dao";
 import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@/lib/types";
+import { getDefaultOllamaEndpoint, isAllowedOllamaEndpoint } from "@/lib/ollama-endpoint";
 
 /**
  * Helper function to retrieve authenticated operator name from Clerk.
@@ -646,8 +647,25 @@ export async function updateTenantOllamaConfigAction(config: {
   sensitiveFilePatterns?: string[];
 }) {
   try {
-    const { tenantId } = await requireTenant();
-    await updateTenantOllamaConfig(tenantId, config);
+    const { tenantId, isSandbox } = await requireTenant();
+    const update = { ...config };
+
+    if (update.ollamaEndpoint !== undefined) {
+      const endpoint = update.ollamaEndpoint.trim();
+      if (isSandbox) {
+        // Public sandbox: the endpoint is fixed to the operator default and is never stored.
+        if (endpoint !== getDefaultOllamaEndpoint()) {
+          return { success: false, error: "The Ollama endpoint cannot be changed in the sandbox." };
+        }
+        delete update.ollamaEndpoint;
+      } else if (!isAllowedOllamaEndpoint(endpoint)) {
+        return { success: false, error: "This Ollama endpoint host is not permitted on this server (OLLAMA_ALLOWED_HOSTS)." };
+      } else {
+        update.ollamaEndpoint = endpoint;
+      }
+    }
+
+    await updateTenantOllamaConfig(tenantId, update);
     revalidatePath('/security');
     revalidatePath('/dashboard');
     return { success: true };

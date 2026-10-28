@@ -1,11 +1,10 @@
 import { AgentTelemetry } from "./types";
 import { env } from "./env";
 import { getTenantOllamaConfig } from "./dao";
+import { getDefaultOllamaEndpoint, isAllowedOllamaEndpoint } from "./ollama-endpoint";
 
-// Bypass local corporate proxy TLS issues only in development
-if (process.env.NODE_ENV === "development") {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-}
+// TLS verification is never disabled. Behind a corporate TLS-intercepting proxy, point
+// NODE_EXTRA_CA_CERTS at the proxy's CA bundle instead.
 
 /**
  * Robust JSON parser that extracts JSON blocks using regex fallback
@@ -52,12 +51,18 @@ Telemetry Data:
 
 Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITICAL", "reasoning": "1 sentence explanation."}`;
 
-  const host = endpoint || env("OLLAMA_HOST", "http://localhost:11434");
+  const host = endpoint || getDefaultOllamaEndpoint();
   const modelName = model || env("OLLAMA_MODEL", "llama3");
+
+  // SSRF guard: only allow-listed hosts are ever contacted (see OLLAMA_ALLOWED_HOSTS).
+  if (!isAllowedOllamaEndpoint(host)) {
+    throw new Error("Configured Ollama endpoint is not permitted by OLLAMA_ALLOWED_HOSTS.");
+  }
   const apiURL = `${host.replace(/\/$/, "")}/api/generate`;
 
   const response = await fetch(apiURL, {
     method: "POST",
+    redirect: "error",
     headers: {
       "Content-Type": "application/json"
     },
@@ -70,8 +75,8 @@ Respond ONLY in JSON format like this: {"riskLevel": "SAFE" | "WARNING" | "CRITI
   });
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Ollama API Error: ${err}`);
+    // Do not echo the upstream body back to callers.
+    throw new Error(`Ollama API Error: HTTP ${response.status}`);
   }
 
   const data = await response.json();
@@ -197,7 +202,7 @@ export async function evaluateTelemetryRisk(telemetry: AgentTelemetry): Promise<
     };
   } catch (error: any) {
     if (evaluationMode === "PURE_OLLAMA") {
-      throw new Error(`Local Ollama is offline or unreachable at '${config.ollamaEndpoint}'. Please start Ollama and run 'ollama run ${config.ollamaModel}' first.`);
+      throw new Error(`Local Ollama is offline, unreachable or not allow-listed. Please start Ollama and run 'ollama run ${config.ollamaModel}' first.`);
     }
 
     console.warn("⚠️ Local Ollama evaluation failed. Falling back to local offline heuristic...", error);

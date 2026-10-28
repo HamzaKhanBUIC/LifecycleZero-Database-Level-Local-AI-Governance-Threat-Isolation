@@ -253,7 +253,7 @@ export async function POST(request: Request) {
         console.error("❌ PURE_OLLAMA Ingestion Evaluation Failed:", err);
         return NextResponse.json({
           error: "OLLAMA_OFFLINE",
-          message: err.message || `Local Ollama is offline or unreachable at '${config.ollamaEndpoint}'. Please start Ollama first.`
+          message: err.message || "Local Ollama is offline or unreachable. Please start Ollama first."
         }, { status: 503 });
       }
     }

@@ -307,6 +307,11 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
             : 'Configuration applied successfully.'
         });
         mutate(['dashboardData', activeTenantId]);
+      } else {
+        setConnectionStatus({
+          status: 'error',
+          message: res.error || 'Failed to write configuration to database.'
+        });
       }
     } catch (err) {
       console.error("Failed to save Ollama config:", err);
