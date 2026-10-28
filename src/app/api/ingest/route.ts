@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAssetById, createHardwareAsset, getTenantOllamaConfig, getTenantMetadata } from '@/lib/dao';
 import { sendToQueue } from '@/lib/queue';
 import { env } from '@/lib/env';
+import { safeEqual } from '@/lib/timing-safe';
 import { evaluateTelemetryRisk } from '@/lib/ai';
 import { docClient } from '@/lib/dynamodb';
 import { PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
@@ -80,7 +81,17 @@ export async function POST(request: Request) {
   try {
     const agentKey = request.headers.get("x-agent-key");
     const signature = request.headers.get("x-agent-signature");
-    
+
+    // Fail closed: there is no default enrollment key. Without AGENT_API_KEY nothing is accepted.
+    const globalEnrollmentKey = env("AGENT_API_KEY");
+    if (!globalEnrollmentKey) {
+      console.error("[INGEST] AGENT_API_KEY is not configured. Rejecting telemetry.");
+      return NextResponse.json({
+        error: "INGEST_NOT_CONFIGURED",
+        message: "Telemetry ingestion is not configured on this server."
+      }, { status: 500 });
+    }
+
     // Read raw body text first to guarantee layout matches signature computation (AWS/cryptographic standard)
     const rawBody = await request.text();
     const body = JSON.parse(rawBody);
@@ -90,8 +101,6 @@ export async function POST(request: Request) {
     if (!tenantId || !assetId || !processName) {
       return NextResponse.json({ error: "Missing required fields: tenantId, assetId, processName" }, { status: 400 });
     }
-
-    const globalEnrollmentKey = env("AGENT_API_KEY", "demo_agent_key_99");
 
     // Fetch tenant metadata to enforce limits
     const tenantMeta = await getTenantMetadata(tenantId);
@@ -127,7 +136,7 @@ export async function POST(request: Request) {
       }
 
       // New devices require the global enrollment key to onboard
-      if (agentKey !== globalEnrollmentKey) {
+      if (!safeEqual(agentKey, globalEnrollmentKey)) {
         return NextResponse.json({
           error: "UNAUTHORIZED_AGENT",
           message: "Device registration requires a valid global enrollment key."
@@ -136,7 +145,7 @@ export async function POST(request: Request) {
 
       console.log(`[INGEST] Asset ${assetId} not found under tenant ${tenantId}. Auto-enrolling...`);
       try {
-        const deviceSpecificKey = `key_${Math.random().toString(36).substring(2, 10)}_${Math.random().toString(36).substring(2, 10)}`;
+        const deviceSpecificKey = `key_${crypto.randomBytes(32).toString("hex")}`;
         asset = await createHardwareAsset(tenantId, {
           AssetId: assetId,
           AssetName: `Host Device (${assetId})`,
@@ -191,7 +200,7 @@ export async function POST(request: Request) {
         }
       } else {
         // Fallback for legacy sandbox telemetry that does not support cryptographic signing
-        if (agentKey !== expectedAgentKey) {
+        if (!safeEqual(agentKey, expectedAgentKey)) {
           return NextResponse.json({
             error: "UNAUTHORIZED_AGENT",
             message: "Invalid X-Agent-Key credentials for this device."
@@ -199,8 +208,8 @@ export async function POST(request: Request) {
         }
       }
 
-      // Mitigate device spoofing by checking hardware signature matches enrolled signature
-      if (asset.HardwareUuid && hardwareUuid && asset.HardwareUuid !== hardwareUuid) {
+      // Mitigate device spoofing: once a device is pinned to a hardware UUID, every request must present it
+      if (asset.HardwareUuid && asset.HardwareUuid !== hardwareUuid) {
         return NextResponse.json({
           error: "SPOOFING_ATTEMPT",
           message: "Ingestion rejected: Hardware UUID drift detected. Identification verification failed."

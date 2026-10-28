@@ -14,7 +14,8 @@ import {
   updateTenantOllamaConfigAction,
   getTenantTelemetryAction,
   getTenantMetadataAction,
-  upgradeTenantPlanAction
+  upgradeTenantPlanAction,
+  ingestSandboxTelemetryAction
 } from "@/app/actions/api";
 
 export { 
@@ -73,22 +74,10 @@ export class LifecycleZeroAPI {
   }
 
   /**
-   * Performs client-side REST call to stream threat telemetry injection to Edge
+   * Streams a simulated threat telemetry event (sandbox only). The browser never holds an
+   * agent key: the server action forwards it to /api/ingest with the server-side AGENT_API_KEY.
    */
   static async ingestTelemetry(payload: any): Promise<{ ok: boolean; status: number; data: any }> {
-    const res = await fetch("/api/ingest", {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json", 
-        "X-Agent-Key": "demo_agent_key_99" 
-      },
-      body: JSON.stringify(payload)
-    });
-    const resData = await res.json();
-    return {
-      ok: res.ok,
-      status: res.status,
-      data: resData
-    };
+    return ingestSandboxTelemetryAction(payload);
   }
 }

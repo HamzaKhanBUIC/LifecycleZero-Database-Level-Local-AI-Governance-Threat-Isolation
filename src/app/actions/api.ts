@@ -244,6 +244,32 @@ export async function bulkIsolateAssets(
 }
 
 /**
+ * Sandbox-only telemetry simulator used by the dashboard's threat scenarios.
+ * The browser never holds an agent key: the event is passed to the ingest handler
+ * server-side with AGENT_API_KEY, and the tenant comes from the session.
+ */
+export async function ingestSandboxTelemetryAction(payload: Record<string, any>) {
+  const { tenantId, isSandbox } = await requireTenant();
+  if (!isSandbox) {
+    return {
+      ok: false,
+      status: 403,
+      data: { error: "FORBIDDEN", message: "Telemetry simulation is only available in sandbox tenants." }
+    };
+  }
+
+  const { POST } = await import("@/app/api/ingest/route");
+  const res = await POST(new Request("http://localhost/api/ingest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Agent-Key": env("AGENT_API_KEY") },
+    body: JSON.stringify({ ...payload, tenantId })
+  }));
+  const data = await res.json();
+  delete data.agentKey; // never hand a device key to the browser
+  return { ok: res.ok, status: res.status, data };
+}
+
+/**
  * Server action to simulate an agent going silent by setting LastHeartbeat to 10 minutes ago.
  */
 export async function simulateSilentHost(assetId: string) {

@@ -20,6 +20,7 @@
  */
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
+import { safeEqual } from "@/lib/timing-safe";
 import crypto from "node:crypto";
 
 /**
@@ -33,9 +34,18 @@ export async function POST(request: Request) {
   try {
     // 1. Authenticate the rotation caller
     const adminToken = request.headers.get("x-admin-token");
-    const expectedAdminToken = env("ADMIN_ROTATION_SECRET", "admin_rotation_secret_demo");
+    const expectedAdminToken = env("ADMIN_ROTATION_SECRET");
 
-    if (!adminToken || adminToken !== expectedAdminToken) {
+    // Fail closed: there is no default admin token.
+    if (!expectedAdminToken) {
+      console.error("[KEY_ROTATION] ADMIN_ROTATION_SECRET is not configured. Rejecting request.");
+      return NextResponse.json(
+        { error: "NOT_CONFIGURED", message: "Key rotation is not configured on this server." },
+        { status: 500 }
+      );
+    }
+
+    if (!safeEqual(adminToken, expectedAdminToken)) {
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: "Invalid or missing X-Admin-Token header." },
         { status: 401 }
