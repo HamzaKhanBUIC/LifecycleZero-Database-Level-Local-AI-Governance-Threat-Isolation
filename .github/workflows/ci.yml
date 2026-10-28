@@ -32,10 +32,12 @@ jobs:
     - name: Run Build
       run: npm run build
       env:
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_dummy
+        # Placeholder in valid pk_test_ format (base64 of "example.clerk.accounts.dev$"); Clerk rejects
+        # malformed keys while prerendering. No Clerk instance is contacted during the build.
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk # gitleaks:allow (public placeholder)
         CLERK_SECRET_KEY: sk_test_dummy
         AWS_REGION: us-east-1
-        DYNAMODB_TABLE_NAME: LifecycleZero
+        DYNAMODB_TABLE: LifecycleZero
         # Add other dummy env vars needed for build if required
 
     # If we had unit/integration tests running purely locally without real DB, they'd go here:
