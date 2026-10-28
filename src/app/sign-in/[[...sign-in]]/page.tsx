@@ -8,8 +8,8 @@ import { SignIn } from "@clerk/nextjs";
 
 export default function SignInPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("judge_tester@lifecyclezero.com");
-  const [password, setPassword] = useState("H0Hackathon2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -100,7 +100,7 @@ export default function SignInPage() {
                 </div>
                 <h1 className="text-white text-base font-bold uppercase tracking-tight">Access Enterprise Console</h1>
                 <p className="text-zinc-500 text-[10px] uppercase leading-relaxed">
-                  Real authentication is bypassed on this deployment. Use the pre-filled credentials to launch client-side simulation frames.
+                  Real authentication is bypassed on this deployment. Enter any email and password to launch the sandbox simulation.
                 </p>
               </div>
 
