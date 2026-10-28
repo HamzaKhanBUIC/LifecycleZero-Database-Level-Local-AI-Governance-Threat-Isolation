@@ -1,10 +1,28 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { verifyWebhook } from '@clerk/nextjs/webhooks';
 import { docClient } from '@/lib/dynamodb';
+import { env } from '@/lib/env';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  // Fail closed: without the signing secret we cannot tell Clerk (Svix) events from forgeries.
+  // CLERK_WEBHOOK_SIGNING_SECRET is accepted as an alias (the name used in Clerk's docs).
+  const signingSecret = env("CLERK_WEBHOOK_SECRET") || env("CLERK_WEBHOOK_SIGNING_SECRET");
+  if (!signingSecret) {
+    console.error("❌ CLERK_WEBHOOK_SECRET is not configured. Rejecting Clerk webhook.");
+    return NextResponse.json({ error: "Webhook endpoint is not configured." }, { status: 500 });
+  }
+
+  // Verifies the svix-id / svix-timestamp / svix-signature headers against the raw body.
+  let payload: any;
   try {
-    const payload = await req.json();
+    payload = await verifyWebhook(req, { signingSecret });
+  } catch (err: any) {
+    console.warn("⚠️ Clerk webhook signature verification failed:", err?.message);
+    return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
+  }
+
+  try {
     const eventType = payload.type;
     const tableName = process.env.DYNAMODB_TABLE || "LifecycleZero_Assets";
 
@@ -76,6 +94,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("❌ Clerk Webhook Sync Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 }
