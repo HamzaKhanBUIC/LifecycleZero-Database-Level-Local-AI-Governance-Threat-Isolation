@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { docClient } from '@/lib/dynamodb';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { env } from '@/lib/env';
@@ -6,8 +7,29 @@ import { env } from '@/lib/env';
 const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
 export async function POST(request: Request) {
+  // Fail closed: without the signing secret we cannot tell Stripe events from forgeries.
+  const webhookSecret = env("STRIPE_WEBHOOK_SECRET");
+  if (!webhookSecret) {
+    console.error("[STRIPE WEBHOOK] STRIPE_WEBHOOK_SECRET is not configured. Rejecting event.");
+    return NextResponse.json({ error: "Webhook endpoint is not configured." }, { status: 500 });
+  }
+
+  const signature = request.headers.get("stripe-signature");
+  if (!signature) {
+    return NextResponse.json({ error: "Missing stripe-signature header." }, { status: 400 });
+  }
+
+  // Verify the signature against the raw request body (re-serialized JSON would not match).
+  let payload: any;
   try {
-    const payload = await request.json();
+    const rawBody = await request.text();
+    payload = Stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+  } catch (err: any) {
+    console.warn("[STRIPE WEBHOOK] Signature verification failed:", err?.message);
+    return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
+  }
+
+  try {
     const eventType = payload.type;
     const dataObject = payload.data.object;
 
@@ -66,6 +88,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error: any) {
     console.error("[STRIPE WEBHOOK ERROR]", error);
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 }

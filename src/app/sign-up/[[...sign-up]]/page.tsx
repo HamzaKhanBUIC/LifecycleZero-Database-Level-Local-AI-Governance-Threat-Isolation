@@ -1,10 +1,12 @@
 "use client";
 
 import { Shield, Sparkles, Loader2, UserPlus } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { SignUp } from "@clerk/nextjs";
+
+const subscribeNoop = () => () => {};
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -12,11 +14,8 @@ export default function SignUpPage() {
   const [orgName, setOrgName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // true only after hydration on the client (no setState inside an effect)
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
   const isClerkEnabled = process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" && 
                          !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && 

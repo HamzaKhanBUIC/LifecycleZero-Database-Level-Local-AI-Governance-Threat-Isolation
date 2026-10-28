@@ -1,4 +1,4 @@
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant } from "@/lib/tenant";
 import { getTenantDashboardData } from "@/lib/dao";
 import Link from "next/link";
 import { seedActiveTenantAction } from "@/lib/api";
@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 export default async function DashboardPage() {
-  const { tenantId } = await getTenantContext();
+  const { tenantId } = await requireTenant();
   const data = await getTenantDashboardData(tenantId);
 
   const { tenant, assets, pendingRequests } = data;

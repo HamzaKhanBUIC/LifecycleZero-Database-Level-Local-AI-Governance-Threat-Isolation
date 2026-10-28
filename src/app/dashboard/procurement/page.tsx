@@ -1,9 +1,9 @@
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant } from "@/lib/tenant";
 import { getPendingProcurementRequests } from "@/lib/dao";
 import ProcurementQueueView from "./ProcurementQueueView";
 
 export default async function ProcurementPage() {
-  const { tenantId } = await getTenantContext();
+  const { tenantId } = await requireTenant();
   const pendingRequests = await getPendingProcurementRequests(tenantId);
 
   return (

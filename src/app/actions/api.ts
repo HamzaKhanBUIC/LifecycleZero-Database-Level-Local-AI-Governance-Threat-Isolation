@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { QueryCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant, type TenantContext } from "@/lib/tenant";
 import { docClient } from "@/lib/dynamodb";
 import { env } from "@/lib/env";
 import { 
@@ -16,19 +16,14 @@ import {
   getTenantMetadata
 } from "@/lib/dao";
 import { HardwareAsset, ProcurementRequest, Tenant, Employee, AuditLog } from "@/lib/types";
+import { getDefaultOllamaEndpoint, isAllowedOllamaEndpoint } from "@/lib/ollama-endpoint";
 
 /**
  * Helper function to retrieve authenticated operator name from Clerk.
  */
-async function getActorName(): Promise<string> {
+async function getActorName(context: TenantContext): Promise<string> {
   try {
-    const { cookies } = await import('next/headers');
-    const cookieStore = await cookies();
-    const tenantCookie = cookieStore.get("lifecycle_tenant_id")?.value;
-    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
-    const isSandbox = allowedSandboxTenants.includes(tenantCookie || "");
-
-    if (isSandbox) {
+    if (context.isSandbox) {
       return "Demo Administrator";
     }
 
@@ -48,22 +43,11 @@ async function getActorName(): Promise<string> {
 }
 
 /**
- * Fetch all assets for a given tenant
+ * Fetch all assets for the caller's tenant (derived from the session, never from the client)
  */
-export async function getAssets(tenantId: string) {
+export async function getAssets() {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
-  // Only override tenantId from auth context when Clerk is active (not in demo/skip mode)
-  let activeTenantId = tenantId;
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-    try {
-      const context = await getTenantContext();
-      if (context.tenantId) {
-        activeTenantId = context.tenantId;
-      }
-    } catch {
-      console.warn("[getAssets] Fallback to client tenantId:", tenantId);
-    }
-  }
+  const { tenantId: activeTenantId } = await requireTenant();
 
   const command = new QueryCommand({
     TableName: TABLE_NAME,
@@ -81,20 +65,9 @@ export async function getAssets(tenantId: string) {
 /**
  * Fetch cross-asset telemetry alerts using GSI2 (Sparse Index)
  */
-export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
+export async function getCrossAssetAlerts() {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
-  // Only override tenantId from auth context when Clerk is active (not in demo/skip mode)
-  let activeTenantId = tenantId;
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-    try {
-      const context = await getTenantContext();
-      if (context.tenantId) {
-        activeTenantId = context.tenantId;
-      }
-    } catch {
-      console.warn("[getCrossAssetAlerts] Fallback to client tenantId:", tenantId);
-    }
-  }
+  const { tenantId: activeTenantId } = await requireTenant();
 
   const queryAlerts = async (riskLevel: string) => {
     const command = new QueryCommand({
@@ -120,24 +93,11 @@ export async function getCrossAssetAlerts(tenantId: string = "org_demo_123") {
 /**
  * Isolate an asset, writing to the audit log.
  */
-export async function isolateAsset(tenantId: string, assetId: string, reason?: string) {
-  let activeTenantId = tenantId;
-  let actorId = "ADMIN_123";
-  const actorName = await getActorName();
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-    try {
-      const context = await getTenantContext();
-      if (context.tenantId) {
-        activeTenantId = context.tenantId;
-        actorId = context.userId || actorId;
-      }
-    } catch {
-      console.warn("[isolateAsset] Fallback to client tenantId:", tenantId);
-    }
-  } else {
-    // In demo mode, get actorId from mock context
-    actorId = "user_mock_admin";
-  }
+export async function isolateAsset(assetId: string, reason?: string) {
+  const context = await requireTenant();
+  const activeTenantId = context.tenantId;
+  const actorId = context.userId;
+  const actorName = await getActorName(context);
 
   const asset = await getAssetById(activeTenantId, assetId);
   if (!asset) {
@@ -174,23 +134,11 @@ export async function isolateAsset(tenantId: string, assetId: string, reason?: s
 /**
  * Restore an asset from isolation, writing to the audit log.
  */
-export async function restoreAsset(tenantId: string, assetId: string) {
-  let activeTenantId = tenantId;
-  let actorId = "ADMIN_123";
-  const actorName = await getActorName();
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-    try {
-      const context = await getTenantContext();
-      if (context.tenantId) {
-        activeTenantId = context.tenantId;
-        actorId = context.userId || actorId;
-      }
-    } catch {
-      console.warn("[restoreAsset] Fallback to client tenantId:", tenantId);
-    }
-  } else {
-    actorId = "user_mock_admin";
-  }
+export async function restoreAsset(assetId: string) {
+  const context = await requireTenant();
+  const activeTenantId = context.tenantId;
+  const actorId = context.userId;
+  const actorName = await getActorName(context);
 
   const asset = await getAssetById(activeTenantId, assetId);
   if (!asset) {
@@ -228,7 +176,6 @@ export async function restoreAsset(tenantId: string, assetId: string) {
  * Bulk-isolate multiple assets in parallel.
  */
 export async function bulkIsolateAssets(
-  tenantId: string,
   assetIds: string[]
 ): Promise<{
   totalRequested: number;
@@ -240,22 +187,8 @@ export async function bulkIsolateAssets(
     return { totalRequested: 0, succeeded: [], failed: [], alreadyIsolated: [] };
   }
 
-  let activeTenantId = tenantId;
-  let actorId = "ADMIN_123";
+  const { tenantId: activeTenantId, userId: actorId } = await requireTenant();
   const actorName = "Security Administrator";
-  if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-    try {
-      const context = await getTenantContext();
-      if (context.tenantId) {
-        activeTenantId = context.tenantId;
-        actorId = context.userId || actorId;
-      }
-    } catch {
-      console.warn("[bulkIsolateAssets] Fallback to client tenantId:", tenantId);
-    }
-  } else {
-    actorId = "user_mock_admin";
-  }
 
   const results = await Promise.allSettled(
     assetIds.map(async (assetId) => {
@@ -312,14 +245,41 @@ export async function bulkIsolateAssets(
 }
 
 /**
+ * Sandbox-only telemetry simulator used by the dashboard's threat scenarios.
+ * The browser never holds an agent key: the event is passed to the ingest handler
+ * server-side with AGENT_API_KEY, and the tenant comes from the session.
+ */
+export async function ingestSandboxTelemetryAction(payload: Record<string, any>) {
+  const { tenantId, isSandbox } = await requireTenant();
+  if (!isSandbox) {
+    return {
+      ok: false,
+      status: 403,
+      data: { error: "FORBIDDEN", message: "Telemetry simulation is only available in sandbox tenants." }
+    };
+  }
+
+  const { POST } = await import("@/app/api/ingest/route");
+  const res = await POST(new Request("http://localhost/api/ingest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Agent-Key": env("AGENT_API_KEY") },
+    body: JSON.stringify({ ...payload, tenantId })
+  }));
+  const data = await res.json();
+  delete data.agentKey; // never hand a device key to the browser
+  return { ok: res.ok, status: res.status, data };
+}
+
+/**
  * Server action to simulate an agent going silent by setting LastHeartbeat to 10 minutes ago.
  */
-export async function simulateSilentHost(tenantId: string, assetId: string) {
+export async function simulateSilentHost(assetId: string) {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
   const timestamp = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-  
+
   try {
-    await docClient.send(new UpdateCommand({
+    const { tenantId } = await requireTenant();
+await docClient.send(new UpdateCommand({
       TableName: TABLE_NAME,
       Key: { PK: `TENANT#${tenantId}`, SK: `ASSET#${assetId}` },
       UpdateExpression: "SET LastHeartbeat = :ts",
@@ -348,8 +308,9 @@ export async function updateAssetStatusAction(params: {
   details: string;
 }) {
   try {
-    const { tenantId, userId } = await getTenantContext();
-    const userName = await getActorName();
+    const context = await requireTenant();
+    const { tenantId, userId } = context;
+    const userName = await getActorName(context);
 
     await updateAssetStatusTransaction({
       tenantId,
@@ -382,9 +343,10 @@ export async function createRequestAction(data: {
   department: string;
 }) {
   try {
-    const { tenantId, userId } = await getTenantContext();
-    const userName = await getActorName();
-    const requestId = `REQ-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+    const context = await requireTenant();
+    const { tenantId, userId } = context;
+    const userName = await getActorName(context);
+const requestId = `REQ-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
     await submitProcurementRequest(tenantId, {
       RequestId: requestId,
@@ -409,8 +371,9 @@ export async function createRequestAction(data: {
  */
 export async function resolveRequestAction(requestId: string, decision: 'APPROVED' | 'REJECTED') {
   try {
-    const { tenantId, userId } = await getTenantContext();
-    const userName = await getActorName();
+    const context = await requireTenant();
+    const { tenantId, userId } = context;
+    const userName = await getActorName(context);
 
     const result = await resolveProcurementRequest(
       tenantId,
@@ -433,17 +396,11 @@ export async function resolveRequestAction(requestId: string, decision: 'APPROVE
 /**
  * Seed sample data for active tenant sandbox
  */
-export async function seedActiveTenantAction(tenantIdOverride?: string) {
+export async function seedActiveTenantAction() {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
   try {
-    let tenantId = tenantIdOverride;
-    if (!tenantId) {
-      const context = await getTenantContext();
-      tenantId = context.tenantId;
-    }
-
-    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
-    if (!allowedSandboxTenants.includes(tenantId)) {
+    const { tenantId, isSandbox } = await requireTenant();
+    if (!isSandbox) {
       throw new Error("Sandbox seeding/resetting is restricted to sandbox demo tenants only.");
     }
     const timestamp = new Date().toISOString();
@@ -639,8 +596,8 @@ export async function registerAssetAction(data: {
   employeeName?: string;
 }) {
   try {
-    const { tenantId } = await getTenantContext();
-    
+    const { tenantId } = await requireTenant();
+
     // Check if asset already exists
     const existing = await getAssetById(tenantId, data.assetId);
     if (existing) {
@@ -671,8 +628,8 @@ export async function registerAssetAction(data: {
  */
 export async function getTenantOllamaConfigAction() {
   try {
-    const { tenantId } = await getTenantContext();
-    const config = await getTenantOllamaConfig(tenantId || "org_demo_123");
+    const { tenantId } = await requireTenant();
+    const config = await getTenantOllamaConfig(tenantId);
     return { success: true, config };
   } catch (error: any) {
     console.error("❌ getTenantOllamaConfigAction Error:", error);
@@ -690,8 +647,25 @@ export async function updateTenantOllamaConfigAction(config: {
   sensitiveFilePatterns?: string[];
 }) {
   try {
-    const { tenantId } = await getTenantContext();
-    await updateTenantOllamaConfig(tenantId || "org_demo_123", config);
+    const { tenantId, isSandbox } = await requireTenant();
+    const update = { ...config };
+
+    if (update.ollamaEndpoint !== undefined) {
+      const endpoint = update.ollamaEndpoint.trim();
+      if (isSandbox) {
+        // Public sandbox: the endpoint is fixed to the operator default and is never stored.
+        if (endpoint !== getDefaultOllamaEndpoint()) {
+          return { success: false, error: "The Ollama endpoint cannot be changed in the sandbox." };
+        }
+        delete update.ollamaEndpoint;
+      } else if (!isAllowedOllamaEndpoint(endpoint)) {
+        return { success: false, error: "This Ollama endpoint host is not permitted on this server (OLLAMA_ALLOWED_HOSTS)." };
+      } else {
+        update.ollamaEndpoint = endpoint;
+      }
+    }
+
+    await updateTenantOllamaConfig(tenantId, update);
     revalidatePath('/security');
     revalidatePath('/dashboard');
     return { success: true };
@@ -704,20 +678,10 @@ export async function updateTenantOllamaConfigAction(config: {
 /**
  * Server action to get all sharded telemetry data for a given tenant within the last 15 minutes
  */
-export async function getTenantTelemetryAction(tenantId: string) {
+export async function getTenantTelemetryAction() {
   try {
     const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
-    let activeTenantId = tenantId;
-    if (process.env.NEXT_PUBLIC_SKIP_CLERK !== "true") {
-      try {
-        const context = await getTenantContext();
-        if (context.tenantId) {
-          activeTenantId = context.tenantId;
-        }
-      } catch {
-        console.warn("[getTenantTelemetryAction] Fallback to client tenantId:", tenantId);
-      }
-    }
+    const { tenantId: activeTenantId } = await requireTenant();
 
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
@@ -753,12 +717,12 @@ export async function getTenantTelemetryAction(tenantId: string) {
  */
 export async function getTenantMetadataAction() {
   try {
-    const { tenantId } = await getTenantContext();
-    const metadata = await getTenantMetadata(tenantId || "org_demo_123");
-    
+    const { tenantId } = await requireTenant();
+    const metadata = await getTenantMetadata(tenantId);
+
     // Fallback if metadata not seeded
     const fallbackMetadata: Tenant = {
-      PK: `TENANT#${tenantId || "org_demo_123"}`,
+      PK: `TENANT#${tenantId}`,
       SK: "METADATA",
       TenantName: "Acme Corp Remote",
       TenantSlug: "acme-corp",
@@ -779,13 +743,17 @@ export async function getTenantMetadataAction() {
 }
 
 /**
- * Server action to upgrade Tenant plan to Enterprise directly via mock portal
+ * Server action to upgrade Tenant plan to Enterprise directly via mock portal.
+ * Sandbox tenants only: live tenants change plans through verified Stripe webhooks.
  */
-export async function upgradeTenantPlanAction(tenantId: string) {
+export async function upgradeTenantPlanAction() {
   const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
   try {
-    const { PutCommand } = await import("@aws-sdk/lib-dynamodb");
-    
+    const { tenantId, isSandbox } = await requireTenant();
+    if (!isSandbox) {
+      return { success: false, error: "Plan changes for live tenants are processed through Stripe billing." };
+    }
+
     await docClient.send(new PutCommand({
       TableName: TABLE_NAME,
       Item: {

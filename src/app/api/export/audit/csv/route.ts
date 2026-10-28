@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAssets, getCrossAssetAlerts } from '@/lib/api';
+import { requireTenant, UnauthorizedError } from '@/lib/tenant';
 
 export async function GET() {
-  const TENANT_ID = "org_demo_123";
-
   try {
+    // Export only the caller's own tenant (session or sandbox cookie), never a hard-coded one
+    await requireTenant();
     const [assets, alerts] = await Promise.all([
-      getAssets(TENANT_ID),
-      getCrossAssetAlerts(TENANT_ID)
+      getAssets(),
+      getCrossAssetAlerts()
     ]);
 
     const criticalIncidents = alerts.filter((a: any) => a.RiskLevel === 'CRITICAL');
@@ -45,6 +46,9 @@ export async function GET() {
     });
 
   } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
     console.error("CSV Export failed", error);
     return NextResponse.json({ error: "Failed to generate SOC 2 CSV Export" }, { status: 500 });
   }

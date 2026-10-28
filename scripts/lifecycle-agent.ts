@@ -10,7 +10,7 @@ dotenv.config({ path: ".env.local" });
 const INGEST_URL = process.env.INGEST_URL || "http://localhost:3000/api/ingest";
 const TENANT_ID = process.env.TENANT_ID || "org_demo_123";
 const ASSET_ID = process.argv[2] || "AST-M3PRO-001"; // Alice Chen's MacBook Pro
-const AGENT_KEY = process.argv[3] || process.env.AGENT_API_KEY || "demo_agent_key_99";
+const AGENT_KEY = process.argv[3] || process.env.AGENT_API_KEY || "";
 
 const KEY_FILE = path.join(process.cwd(), `scripts/agent-${ASSET_ID}.key`);
 
@@ -106,6 +106,12 @@ async function runAgent() {
     }
   }
 
+  // Fail closed: there is no built-in default key.
+  if (!activeAgentKey) {
+    console.error("❌ AGENT_API_KEY is not set. Add it to .env.local, export it, or pass it as the second argument: npm run agent -- <ASSET_ID> <AGENT_KEY>");
+    process.exit(1);
+  }
+
   console.log(`🔒 LifecycleZero Endpoint Agent starting on host: ${os.hostname()}...`);
   console.log(`📡 Hardware UUID: ${hardwareUuid}`);
   console.log(`📡 Targeting Ingest API: ${INGEST_URL}`);
@@ -181,7 +187,7 @@ async function runAgent() {
 
         // Handshake: If server returns a device-specific rotated key, store it for future heartbeats
         if (data.agentKey && data.agentKey !== activeAgentKey) {
-          console.log(`🔑 [CREDENTIAL ROTATION] Server issued unique device-specific agent key: ${data.agentKey}`);
+          console.log(`🔑 [CREDENTIAL ROTATION] Server issued unique device-specific agent key: ${String(data.agentKey).slice(0, 4)}****`);
           activeAgentKey = data.agentKey;
           try {
             fs.writeFileSync(KEY_FILE, activeAgentKey, "utf8");

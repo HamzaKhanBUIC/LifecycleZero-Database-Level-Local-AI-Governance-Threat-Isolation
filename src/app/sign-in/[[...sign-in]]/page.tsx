@@ -1,21 +1,20 @@
 "use client";
 
 import { Shield, Sparkles, Loader2, ArrowRight } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { SignIn } from "@clerk/nextjs";
 
+const subscribeNoop = () => () => {};
+
 export default function SignInPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("judge_tester@lifecyclezero.com");
-  const [password, setPassword] = useState("H0Hackathon2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // true only after hydration on the client (no setState inside an effect)
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
 
   const isClerkEnabled = process.env.NEXT_PUBLIC_SKIP_CLERK !== "true" && 
                          !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && 
@@ -100,7 +99,7 @@ export default function SignInPage() {
                 </div>
                 <h1 className="text-white text-base font-bold uppercase tracking-tight">Access Enterprise Console</h1>
                 <p className="text-zinc-500 text-[10px] uppercase leading-relaxed">
-                  Real authentication is bypassed on this deployment. Use the pre-filled credentials to launch client-side simulation frames.
+                  Real authentication is bypassed on this deployment. Enter any email and password to launch the sandbox simulation.
                 </p>
               </div>
 
@@ -146,7 +145,7 @@ export default function SignInPage() {
 
               <div className="text-center mt-3 pt-3 border-t border-zinc-900">
                 <span className="text-zinc-500 text-[10px] uppercase">
-                  Don't have an account?{" "}
+                  Don&apos;t have an account?{" "}
                   <Link href="/sign-up" className="text-white hover:underline underline-offset-4 font-bold">
                     Sign Up
                   </Link>

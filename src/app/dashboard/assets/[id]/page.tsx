@@ -1,4 +1,4 @@
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant } from "@/lib/tenant";
 import { getAssetById, getAuditTrailForAsset } from "@/lib/dao";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -9,7 +9,7 @@ interface PageProps {
 
 export default async function AssetDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const { tenantId } = await getTenantContext();
+  const { tenantId } = await requireTenant();
 
   const asset = await getAssetById(tenantId, id);
   if (!asset) {

@@ -1,9 +1,9 @@
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant } from "@/lib/tenant";
 import { getTenantDashboardData } from "@/lib/dao";
 import AssetFleetView from "./AssetFleetView";
 
 export default async function AssetsPage() {
-  const { tenantId } = await getTenantContext();
+  const { tenantId } = await requireTenant();
   const data = await getTenantDashboardData(tenantId);
 
   const { assets, employees } = data;

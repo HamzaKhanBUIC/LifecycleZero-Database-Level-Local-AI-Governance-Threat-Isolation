@@ -9,6 +9,8 @@ import { docClient } from "./dynamodb";
 import type { Tenant, Employee, HardwareAsset, ProcurementRequest, AuditLog } from "./types";
 
 import { env } from "./env";
+import { getDefaultOllamaEndpoint } from "./ollama-endpoint";
+import { isSandboxTenant } from "./tenant";
 
 const TABLE_NAME = env("DYNAMODB_TABLE", "LifecycleZero_Assets");
 
@@ -451,9 +453,11 @@ export async function getTenantOllamaConfig(tenantId: string): Promise<TenantOll
       Key: { PK: `TENANT#${tenantId}`, SK: "METADATA" }
     }));
     const tenant = res.Item as Tenant | undefined;
+    // Public sandbox tenants always use the operator default endpoint (they cannot redirect server fetches)
+    const storedEndpoint = isSandboxTenant(tenantId) ? undefined : tenant?.OllamaEndpoint;
     return {
       evaluationMode: tenant?.EvaluationMode || 'HYBRID_HEURISTIC',
-      ollamaEndpoint: tenant?.OllamaEndpoint || env("OLLAMA_HOST", "http://localhost:11434"),
+      ollamaEndpoint: storedEndpoint || getDefaultOllamaEndpoint(),
       ollamaModel: tenant?.OllamaModel || env("OLLAMA_MODEL", "llama3"),
       sensitiveFilePatterns: tenant?.SensitiveFilePatterns
     };
@@ -461,7 +465,7 @@ export async function getTenantOllamaConfig(tenantId: string): Promise<TenantOll
     console.error("Failed to get tenant Ollama config:", err);
     return {
       evaluationMode: 'HYBRID_HEURISTIC',
-      ollamaEndpoint: env("OLLAMA_HOST", "http://localhost:11434"),
+      ollamaEndpoint: getDefaultOllamaEndpoint(),
       ollamaModel: env("OLLAMA_MODEL", "llama3"),
       sensitiveFilePatterns: undefined
     };
