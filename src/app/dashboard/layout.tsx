@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LayoutDashboard, Laptop, ShoppingCart, ShieldAlert, Shield, LogOut, Home } from "lucide-react";
 import { UserButton, OrganizationSwitcher, SignOutButton } from "@clerk/nextjs";
-import { getTenantContext } from "@/lib/auth";
+import { requireTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export default async function DashboardLayout({
   let tenantId = "org_demo_123";
 
   try {
-    const context = await getTenantContext();
+    const context = await requireTenant();
     tenantId = context.tenantId;
     userId = context.userId || (skipClerk ? "user_mock_admin" : null);
   } catch (err) {

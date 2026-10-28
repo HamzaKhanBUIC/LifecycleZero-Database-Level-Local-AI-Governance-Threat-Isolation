@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { DEFAULT_SANDBOX_TENANT, SANDBOX_TENANTS, TENANT_COOKIE } from "@/lib/tenant";
 
 // Rate limiting configurations
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
@@ -107,10 +108,9 @@ export default clerkMiddleware(async (auth, req) => {
   // --- Clerk protection: /dashboard/* & /security ---
   if (isProtectedRoute(req)) {
     const skipClerk = process.env.NEXT_PUBLIC_SKIP_CLERK === "true";
-    const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
+    const tenantCookie = req.cookies.get(TENANT_COOKIE)?.value;
     const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
-    const allowedSandboxTenants = ["org_demo_123", "org_fintech_456", "org_healthco_789"];
-    const isSandbox = isDemoQuery || allowedSandboxTenants.includes(tenantCookie || "");
+    const isSandbox = isDemoQuery || SANDBOX_TENANTS.includes(tenantCookie || "");
 
     if (!skipClerk && !isSandbox) {
       const pubKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -120,12 +120,15 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  // Sniff demo query parameter and set cookie to org_demo_123 automatically so SSR has immediate context
+  // Sniff demo query parameter and set cookie to the default sandbox tenant automatically.
+  // The cookie is also forwarded on this request so SSR (requireTenant) sees the sandbox immediately.
+  // `?demo=true` can only ever select the public sandbox tenant, never a real one.
   const isDemoQuery = req.nextUrl.searchParams.get("demo") === "true";
-  const tenantCookie = req.cookies.get("lifecycle_tenant_id")?.value;
-  if (isDemoQuery && tenantCookie !== "org_demo_123") {
-    const response = NextResponse.next();
-    response.cookies.set("lifecycle_tenant_id", "org_demo_123", { path: "/" });
+  const tenantCookie = req.cookies.get(TENANT_COOKIE)?.value;
+  if (isDemoQuery && tenantCookie !== DEFAULT_SANDBOX_TENANT) {
+    req.cookies.set(TENANT_COOKIE, DEFAULT_SANDBOX_TENANT);
+    const response = NextResponse.next({ request: { headers: req.headers } });
+    response.cookies.set(TENANT_COOKIE, DEFAULT_SANDBOX_TENANT, { path: "/" });
     return response;
   }
 

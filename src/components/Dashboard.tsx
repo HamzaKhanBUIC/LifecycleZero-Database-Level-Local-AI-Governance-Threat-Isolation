@@ -59,10 +59,10 @@ const fetchDashboardData = async (tenantId: string) => {
   const isSandbox = allowedSandboxTenants.includes(tenantId);
 
   const [fetchedAssets, fetchedAlerts, configRes, telemetryRes, metadataRes] = await Promise.all([
-    getAssets(tenantId),
-    getCrossAssetAlerts(tenantId),
+    getAssets(),
+    getCrossAssetAlerts(),
     getTenantOllamaConfigAction(),
-    isSandbox ? Promise.resolve({ success: true, telemetry: [] }) : getTenantTelemetryAction(tenantId),
+    isSandbox ? Promise.resolve({ success: true, telemetry: [] }) : getTenantTelemetryAction(),
     getTenantMetadataAction()
   ]);
 
@@ -337,7 +337,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
   const handleInitializeGrid = async () => {
     setInitializingGrid(true);
     try {
-      const res = await seedActiveTenantAction(activeTenantId);
+      const res = await seedActiveTenantAction();
       if (res.success) {
         mutate(['dashboardData', activeTenantId]);
       } else {
@@ -421,7 +421,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
       setTimeout(async () => {
         try {
-          const res = await simulateSilentHost(activeTenantId, scenario.payload.assetId);
+          const res = await simulateSilentHost(scenario.payload.assetId);
           if (res.success) {
             setSimulationLog(prev => [
               ...prev,
@@ -467,7 +467,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
       try {
         // If asset is isolated, restore it first so ingest isn't blocked
         if (needsRestore) {
-          await restoreAsset(activeTenantId, payload.assetId);
+          await restoreAsset(payload.assetId);
           setSimulationLog(prev => [
             ...prev,
             `[RESTORE] Host connectivity re-established. Proceeding with injection...`
@@ -524,7 +524,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
         assets: assets.map((a: any) => a.AssetId === assetId ? { ...a, Status: "ISOLATED" } : a)
       }, false);
       
-      const res = await isolateAsset(activeTenantId, assetId, reason);
+      const res = await isolateAsset(assetId, reason);
       if (res && !res.success) {
         setError(res.error || "Failed to isolate host.");
         // Rollback optimistic update
@@ -633,7 +633,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
 
         setCliHistory(prev => [...prev, `  [ACTION] Restoring connectivity for host '${id}'...`, ""]);
         try {
-          const res = await restoreAsset(activeTenantId, id);
+          const res = await restoreAsset(id);
           if (res.success) {
             setCliHistory(prev => [...prev, `  [SUCCESS] Host network link re-established for '${id}'.`, ""]);
             if (!isMuted) audio.playClick();
@@ -730,7 +730,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
     setBulkIsolating(true);
     try {
       const ids = Array.from(selectedAssetIds);
-      await bulkIsolateAssets(activeTenantId, ids);
+      await bulkIsolateAssets(ids);
       setSelectedAssetIds(new Set());
       setSelectionMode(false);
       mutate(['dashboardData', activeTenantId]);
@@ -1895,7 +1895,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
                       await new Promise(resolve => setTimeout(resolve, 2000));
                       
                       // Upgrade plan in database
-                      const res = await upgradeTenantPlanAction(activeTenantId);
+                      const res = await upgradeTenantPlanAction();
                       if (res.success) {
                         mutate(['dashboardData', activeTenantId]);
                         setShowPaymentModal(false);
@@ -2103,7 +2103,7 @@ export default function Dashboard({ initialAssets, initialAlerts, tenantId, isFo
               ) : (
                 <button
                   onClick={async () => {
-                    const res = await restoreAsset(activeTenantId, selectedAsset.AssetId);
+                    const res = await restoreAsset(selectedAsset.AssetId);
                     if (res.success) {
                       setSelectedAsset((prev: any) => prev ? { ...prev, Status: "ACTIVE" } : null);
                       mutate('dashboardData');
